@@ -1,5 +1,6 @@
 # Local environments and credentials
 .venv/
+.venv-data/
 venv/
 .env
 .env.*

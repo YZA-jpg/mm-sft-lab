@@ -1,0 +1,3 @@
+# Data preparation only; model inference dependencies will be added separately.
+huggingface-hub>=0.34,<2
+Pillow>=10.3,<13
