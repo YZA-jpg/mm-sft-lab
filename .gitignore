@@ -1,0 +1,36 @@
+# Local environments and credentials
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Python tooling
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+
+# Local data, benchmark checkouts, and experiment artifacts
+/data/
+/datasets/
+/third_party/
+/runs/
+/outputs/
+/checkpoints/
+/cache/
+/logs/
+/configs/local/
+*.log
+*.safetensors
+*.ckpt
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
