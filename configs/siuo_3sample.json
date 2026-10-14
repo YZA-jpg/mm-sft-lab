@@ -1,0 +1,12 @@
+{
+  "protocol_id": "siuo_3sample_v1",
+  "backend": "qwen3_vl_hf",
+  "batch_size": 1,
+  "max_new_tokens": 500,
+  "do_sample": true,
+  "seeds": [42, 43, 44],
+  "temperature": 0.7,
+  "top_p": 0.8,
+  "top_k": 20,
+  "tasks": ["siuo/gen"]
+}

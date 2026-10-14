@@ -2,7 +2,7 @@
 
 日期：2026-10-13。状态：初版设计，供审阅和后续实现。
 
-本文中的模块、配置、命令接口和目录树是设计约定，不代表全部已实现。数据准备脚本已在本地实现并通过离线测试，当前可执行接口见 [数据准备](../data-preparation.md)；真实数据与模型运行尚未在服务器验证。
+本文中的模块、配置、命令接口和目录树是设计约定，不代表全部已实现。已实现接口见 [数据准备](../data-preparation.md) 与 [baseline 框架](../baseline.md)；GPU 推理和在线 judge 尚未在服务器验证。
 
 ## 1. 目标与边界
 
@@ -15,7 +15,7 @@
 - 模型路径：`/data1/sharehub/models/Qwen3-VL-4B-Instruct`。
 - 用户提供的 GPU 行：物理 GPU 7，NVIDIA A100-SXM4-80GB。
 - 按单张 A100 80GB 设计；这条信息不代表其余 GPU 的数量或可用性，也不代表 GPU 7 当前显存空闲。
-- 服务器地址、数据目录、Python/CUDA 环境、judge 服务尚未检查。
+- 服务器代码目录已确认 `/data1/yaoziao/mm-sft-lab`，默认数据目录为其下的 `data/`；推理环境与 judge 服务待配置。
 
 当前阶段覆盖图像与文本。安全性与通用能力分别评测；SIUO 的有效性和 MSSBench 的安全场景分数不能替代独立的通用能力 benchmark。
 
@@ -225,7 +225,7 @@ report.md
 errors.jsonl
 ```
 
-接口职责固定为 `preflight → prepare → generate → judge → score → compare`，所有入口支持配置文件与 run ID。上述接口尚未实现，因此本文不提供可直接执行的虚构命令。
+接口职责固定为 `preflight → prepare → generate → judge → score → compare`。当前实现使用 JSON 配置与 run 目录；实际参数、产物及已实现范围以 [baseline 框架](../baseline.md) 为准。
 
 ## 9. 后续 SFT 实验设计
 
@@ -278,7 +278,7 @@ M3：原始模型的独立能力 baseline 完成，具备正式开展 SFT 数据
 
 M4：首个通用 SFT 对照与混合配方跑通，复用同一评测协议输出差值和错误样本。
 
-当前实际状态仅为设计文档完成，尚未连接服务器、加载模型、获取 benchmark 数据、调用 judge 或运行训练。
+2026-10-14 状态：本地真实数据准备完成，经 SCP 传至服务器 `data/imported`，两端完整性校验通过。本地 baseline 框架已通过 64 项测试与 mock 全链路，待用户提交推送并同步服务器；模型加载、在线判分及训练尚未实际运行。
 
 ## 13. 架构决策记录（初版 Proposed）
 

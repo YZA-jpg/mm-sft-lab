@@ -1,0 +1,6 @@
+{
+  "protocol_id": "pipeline_mock_v1",
+  "backend": "mock",
+  "per_task_limit": 1,
+  "require_locked_data": false
+}

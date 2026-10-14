@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mm-sft-lab"
+version = "0.1.0"
+description = "Reproducible multimodal SFT safety and capability experiments"
+requires-python = ">=3.10"
+dependencies = ["Pillow>=10.3,<13"]
+
+[project.optional-dependencies]
+api = ["openai>=1.55,<3"]
+inference = ["transformers>=4.57,<5", "accelerate>=1,<2"]
+
+[project.scripts]
+mm-sft-lab = "mm_sft_lab.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mm_sft_lab = ["MSSBench-LICENSE.txt"]

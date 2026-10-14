@@ -1,6 +1,8 @@
 # SIUO / MSSBench 数据准备
 
-这一批只完成 baseline 的数据准备：下载官方数据、固定版本、检查图片与标注、生成统一输入和独立评分标签。推理 prompt、模型加载和 judge 在数据校验通过后接入。
+本文覆盖 baseline 的数据准备：下载官方数据、固定版本、检查图片与标注、生成统一输入和独立评分标签。后续推理、API judge 与报告入口见 [baseline 框架](baseline.md)。
+
+服务器当前访问 Hugging Face 超时；本地准备并传输的数据流程见 [离线数据传输](offline-data-transfer.md)。下文的服务器直接下载方式适用于数据源网络已连通的情况。
 
 ## 来源与版本
 
@@ -18,16 +20,20 @@ GitHub 标注下载使用固定 SHA 的 raw 链接；GitHub 分支通过 `git ls
 
 本地由助手编辑代码、运行离线检查；用户提交并推送。服务器由用户克隆或拉取该提交、安装依赖、下载数据并反馈结果。以下服务器命令在确定服务器仓库目录后逐步执行；上一阶段失败时先保留输出并排查。
 
-数据准备需要 Git、Python 3.10 或更高版本，不需要 GPU。建议使用独立 `.venv-data`，后续模型推理环境单独配置。
+数据准备需要 Git、Python 3.10 或更高版本，不需要 GPU。当前服务器通过 Conda 的 conda-forge 频道创建 Python 3.11 的 `.venv-data`，后续模型推理环境单独配置。以下是首次创建流程；已有环境时跳过创建并使用其中的 Python。
 
 服务器 Bash，在仓库根目录创建环境：
 
 ```bash
 (
   set -e
-  python3 --version
   git rev-parse HEAD
-  python3 -m venv .venv-data
+  if [ -e .venv-data ]; then
+    echo '.venv-data 已存在，请检查后复用'
+    exit 1
+  fi
+  conda create --prefix "$PWD/.venv-data" --override-channels --channel conda-forge python=3.11 pip -y
+  .venv-data/bin/python --version
   .venv-data/bin/python -m pip install -r requirements-data.txt
   .venv-data/bin/python -m unittest discover -s tests -v
 )

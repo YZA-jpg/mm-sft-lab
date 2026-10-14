@@ -13,7 +13,13 @@
 
 数据准备：[SIUO / MSSBench 下载与校验](docs/data-preparation.md)。
 
-当前状态：已实现官方数据下载、版本锁定、规范化与图片完整性校验，并提供离线测试。真实数据尚未在服务器下载验证；推理、判分和训练入口尚未实现。
+服务器数据源网络受限时：[本地下载与离线传输](docs/offline-data-transfer.md)。
+
+已确认的数据版本与两端校验统计：[baseline 数据快照](docs/data-snapshot.md)。
+
+当前状态：真实数据已在本地准备完成并传入服务器 `data/imported`，两端校验通过。baseline 框架包含本地 Qwen3-VL / 模型 API 推理、独立 API judge、断点续跑、指标与报告、逐样本比较；64 项离线测试及 mock 全链路通过，框架代码待同步服务器。GPU 推理与在线 judge 尚待验证，SFT 训练入口尚未实现。
+
+启动说明：[Baseline 框架与服务器流程](docs/baseline.md)。
 
 已实现的数据流程：
 
@@ -25,6 +31,15 @@
 ```
 
 `inputs.jsonl` 保存待评测的文本与图片路径，`evaluation.jsonl` 单独保存评分标签与参考答案。数据准备阶段不修改官方题目、选项或图片，不依赖 GPU 和 PyTorch。
+
+评测入口：
+
+```bash
+python scripts/lab.py --help
+# preflight → plan → generate → judge → score → compare
+```
+
+配置位于 `configs/`：`baseline_smoke.json`、`baseline_full.json`、`siuo_3sample.json`、模型 API 与 judge 示例，以及明确标记的 `mock.json`。API 密钥从环境变量读取；真实服务地址和模型名待服务器运行时配置。
 
 在仓库根目录运行离线检查：
 

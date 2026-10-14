@@ -1,0 +1,14 @@
+{
+  "protocol_id": "api_temperature_zero_v1",
+  "backend": "chat_api",
+  "batch_size": 1,
+  "max_new_tokens": 1024,
+  "per_task_limit": 2,
+  "api": {
+    "base_url_env": "MODEL_BASE_URL",
+    "model_env": "MODEL_ID",
+    "api_key_env": "MODEL_API_KEY",
+    "token_parameter": "max_tokens",
+    "send_seed": false
+  }
+}

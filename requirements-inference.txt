@@ -1,0 +1,4 @@
+-r requirements-data.txt
+# Install a compatible CUDA build of torch separately; see docs/baseline.md.
+transformers>=4.57,<5
+accelerate>=1,<2
