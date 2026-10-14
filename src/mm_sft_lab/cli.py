@@ -23,6 +23,12 @@ def main(argv=None):
     infer.add_argument("--run-dir", type=Path, required=True)
     infer.add_argument("--resume", action="store_true")
     infer.add_argument("--retry-errors", action="store_true")
+    validate = commands.add_parser("validate-run", help="Check generation completeness, visual inputs and batch telemetry without judging")
+    validate.add_argument("--run-dir", type=Path, required=True)
+    batches = commands.add_parser("compare-batches", help="Compare the same greedy requests with only batch_size changed")
+    batches.add_argument("--before", type=Path, required=True)
+    batches.add_argument("--after", type=Path, required=True)
+    batches.add_argument("--output", type=Path, required=True)
     judge = commands.add_parser("judge", help="Judge generated responses through a separate API")
     judge.add_argument("--config", type=Path, default=Path("configs/judge.example.json"))
     judge.add_argument("--run-dir", type=Path, required=True)
@@ -63,6 +69,12 @@ def main(argv=None):
             result = generate(config, args.data_root, args.run_dir, resume=args.resume, retry_errors=args.retry_errors)
             print(json.dumps({key: result[key] for key in ("status", "expected_requests", "successful_requests", "error_requests", "missing_requests")}, indent=2))
             return 0 if result["status"] == "complete" else 2
+        elif args.command in ("validate-run", "compare-batches"):
+            from .diagnostics import compare_batches, validate_run
+            result = (validate_run(args.run_dir) if args.command == "validate-run" else
+                      compare_batches(args.before, args.after, args.output))
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0 if result["status"] == "passed" else 2
         elif args.command == "judge":
             from .judge import judge_run
             if args.retry_errors and not args.resume:

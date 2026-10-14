@@ -15,9 +15,10 @@
 - 第一阶段使用一张 NVIDIA A100-SXM4-80GB；用户提供的物理 GPU 编号为 7。
 - 模型路径：`/data1/sharehub/models/Qwen3-VL-4B-Instruct`。
 - 服务器仓库路径：`/data1/yaoziao/mm-sft-lab`；已校验的离线数据目录为其下的 `data/imported/`。
-- 服务器 Git 2.34.1，base Python 3.14.7，Conda 26.7.1，驱动 580.159.03；数据环境 `.venv-data` 已通过原有 25 项测试。
+- 服务器 Git 2.34.1，base Python 3.14.7，Conda 26.7.1，驱动 580.159.03；数据环境 `.venv-data` 已通过 baseline 框架原有 64 项测试。
 - 默认 Conda 频道遇到 ToS 检查，创建项目环境时使用 `--override-channels --channel conda-forge`。
-- GPU 推理环境与真实 judge 服务仍待安装配置；操作命令见 [baseline 启动流程](baseline.md)。
+- 已有 `ipiguard-py310` 导入 torch 时出现 `__nvJitLinkComplete_12_4` 动态库错误，Transformers 4.48.0 亦低于 Qwen3-VL 要求；GPU 推理环境与真实 judge 服务仍待配置。
+- 下一轮按 [smoke 与小批量步骤](smoke-tests.md) 同步新代码，先核对选样，再处理独立推理环境并分阶段启动。
 
 ## 推进顺序
 
@@ -25,7 +26,7 @@
 2. 本地增加数据下载、规范化和完整性校验脚本。
 3. 用户推送该批修改，在服务器克隆或拉取同一提交。
 4. 本地下载与校验 SIUO、MSSBench，通过 SCP 上传离线包，在服务器解压复核。
-5. 本地增加模型推理与评测入口，服务器执行固定小样本测试。
+5. 本地增加模型推理与评测入口，服务器依次执行 12 条 smoke、同清单 batch 1/4 对照、48 条小批量测试。
 6. 小样本通过后运行全量 baseline，保留回答、评分和运行配置。
 
 ## 数据与产物
@@ -35,4 +36,4 @@
 - 服务器代码更新使用 `git pull --ff-only`；若出现本地修改或分支分叉，先检查原因。
 - 每次服务器测试记录 `git rev-parse HEAD`，用于对应本地代码版本。
 
-当前进度：数据准备提交 `c8c6654` 已同步服务器；离线数据包上传及服务器复核通过。2,294 条请求、980 个 MSSBench 配对、919 个图片文件，两端一致。本地 baseline 框架已通过 64 项测试和 mock 全链路，下一步由用户提交推送并在服务器拉取，随后安装 GPU 环境和执行小样本推理。
+当前进度：baseline 框架提交 `124c9a8` 已推送并同步服务器，原有 64 项测试在服务器通过；离线数据包上传及复核通过。2,294 条请求、980 个 MSSBench 配对、919 个图片文件，两端一致。smoke 与小批量检查代码在本地继续完善，Git 与服务器操作由用户回来后执行，尚未启动模型或调用真实 judge API。

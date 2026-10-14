@@ -2,6 +2,8 @@
 
 当前已实现可执行框架，并通过离线测试；真实 Qwen 模型加载、GPU 推理和在线 judge 仍待服务器验证。用户稍后回来时按下面阶段逐步执行并反馈输出。
 
+本轮新增的分阶段操作以 [smoke 与小批量说明](smoke-tests.md) 为准：12 条 batch 1、同清单 batch 4 对照、48 条小批量。现有 `ipiguard-py310` 的 torch 导入失败，推理环境就绪前只执行选样和离线检查。
+
 ## 入口与目录
 
 无需安装本仓库也可在仓库根目录运行 `python scripts/lab.py --help`；执行 editable install 后也能用 `mm-sft-lab` 或 `python -m mm_sft_lab`。
@@ -11,6 +13,8 @@
 | `preflight` | 检查本地 checkpoint、依赖和单卡 CUDA；API 模式检查配置，不发推理请求 |
 | `plan` | 核对 prepared 文件与图片哈希、打印固定小样本清单的统计，不加载模型 |
 | `generate` | 保存原始回答、token 数、终止原因、错误；支持续跑 |
+| `validate-run` | 检查生成完整性、图文输入、padding、截断和 batch 测量；不调用 judge |
+| `compare-batches` | 比较同一清单仅改变 batch size 的 greedy 回答与输入 grid |
 | `judge` | 使用独立 API 判分；SIUO 传图片，MSSBench 使用回答文本分类 |
 | `score` | 输出 coverage、任务/类别指标、CSV 和 Markdown 报告 |
 | `compare` | 对同数据、同生成协议、同 judge 的完整结果输出差值与 improved/regressed ID |
@@ -23,6 +27,7 @@ src/mm_sft_lab/
   preflight.py     # 本地 checkpoint 和环境记录
   backends.py      # Transformers / Chat Completions API / mock
   runner.py        # 生成、运行指纹与断点恢复
+  diagnostics.py   # smoke 验收、batch 对照与人工复核清单
   judge.py         # 独立 API judge、原始判分与标签
   metrics.py       # 聚合、报告和逐样本比较
   cli.py           # 命令行接口
@@ -55,10 +60,11 @@ python scripts/lab.py score --run-dir runs/demo --judge-dir runs/demo/judge
 
 ## 服务器已知状态
 
-- 仓库：`/data1/yaoziao/mm-sft-lab`；已确认服务器同步到数据准备提交 `c8c6654`。
+- 仓库：`/data1/yaoziao/mm-sft-lab`；已确认服务器同步到 baseline 框架提交 `124c9a8`。
 - 本地模型：`/data1/sharehub/models/Qwen3-VL-4B-Instruct`，目录及 config 可访问。
-- 物理 GPU 7：A100-SXM4-80GB；此前检查约 34 GiB 空闲，运行前重新查询。
-- 服务器 base 的 Python 是 3.14；数据环境使用仓库内 `.venv-data`，25 项数据测试已通过。
+- 物理 GPU 7：A100-SXM4-80GB；最新一次用户检查为 48,700 MiB 空闲，运行前重新查询。
+- 服务器 base 的 Python 是 3.14；数据环境使用仓库内 `.venv-data`，原有 64 项测试已通过。
+- 已有 `ipiguard-py310` 为 Python 3.10.21、torch 2.5.1+cu124、Transformers 4.48.0，导入 torch 报 `__nvJitLinkComplete_12_4` 动态库错误；目前不修改该环境，独立推理环境尚待验证。
 - 服务器直接下载曾因 `[Errno 110] Connection timed out` 失败；已在本地完成下载与校验，并通过 `tstar_001` 上传约 441 MB 的离线包，服务器 SHA-256 校验通过。
 - 服务器数据目录：`/data1/yaoziao/mm-sft-lab/data/imported`；离线图片/标注/配对复核通过，统计与本地一致。后续评测命令使用 `--data-root data/imported`。
 
@@ -114,22 +120,19 @@ nvidia-smi -i 7 --query-gpu=index,name,memory.total,memory.free,driver_version -
 
 ## 第三步：本地 Qwen 小样本推理
 
-服务器 Bash，先做 preflight，再执行 smoke：
+推理环境就绪后，在服务器 Bash 执行第一阶段；脚本先做 preflight，再 plan、generate、validate-run：
 
 ```bash
 (
   set -euo pipefail
   cd /data1/yaoziao/mm-sft-lab
-  export CUDA_VISIBLE_DEVICES=7
-  mkdir -p runs
-  .venv/bin/python scripts/lab.py preflight --config configs/baseline_smoke.json > runs/qwen3-vl-4b-preflight.json
-  .venv/bin/python scripts/lab.py generate --config configs/baseline_smoke.json --data-root data/imported --run-dir runs/qwen3-vl-4b-smoke
+  CUDA_VISIBLE_DEVICES=7 bash scripts/run_checks.sh smoke
 )
 ```
 
 模型和 processor 仅从指定本地目录加载。进程内使用逻辑 `cuda:0`，要求恰好暴露一张 GPU。默认 BF16、SDPA、batch 1、greedy、1024 新 token；不修改 processor 默认视觉预算，不追加安全 system prompt。批量推理左侧 padding，按完整 padding 宽度裁去输入 token。
 
-smoke 回答检查通过后，复制 smoke 配置到 `configs/local/`，只将 batch size 改为 4，在新 run 目录运行并人工核对回答。确认单样本/批量的图片、文本与回答对应后，再用 `configs/baseline_full.json` 跑全量。SIUO 三采样使用单独的 `configs/siuo_3sample.json`，不能与 controlled_v1 混表。
+smoke 回答检查通过后，执行 `bash scripts/run_checks.sh batch` 比较同一清单 batch 1/4 的回答；对照通过后执行 `bash scripts/run_checks.sh small` 跑 48 条。每个阶段分别执行，产物与复核规则见 [smoke 与小批量说明](smoke-tests.md)。确认单样本/批量的图片、文本与回答对应后，再用 `configs/baseline_full.json` 跑全量。SIUO 三采样使用单独的 `configs/siuo_3sample.json`，不能与 controlled_v1 混表。
 
 ## 模型 API 入口
 
@@ -178,8 +181,8 @@ export JUDGE_API_KEY
 (
   set -e
   cd /data1/yaoziao/mm-sft-lab
-  .venv/bin/python scripts/lab.py judge --config configs/judge.example.json --run-dir runs/qwen3-vl-4b-smoke
-  .venv/bin/python scripts/lab.py score --run-dir runs/qwen3-vl-4b-smoke --judge-dir runs/qwen3-vl-4b-smoke/judge
+  .venv/bin/python scripts/lab.py judge --config configs/judge.example.json --run-dir runs/qwen3-vl-4b-checks/smoke-b1
+  .venv/bin/python scripts/lab.py score --run-dir runs/qwen3-vl-4b-checks/smoke-b1 --judge-dir runs/qwen3-vl-4b-checks/smoke-b1/judge
 )
 ```
 
@@ -205,6 +208,11 @@ runs/<run>/
   evaluation.jsonl
   predictions.jsonl
   errors.jsonl                 # 存在生成错误时
+  checks/                     # validate-run 生成，无需 API
+    validation.json
+    validation.md
+    review.jsonl
+    review.csv
   judge/
     manifest.json
     judgments.jsonl

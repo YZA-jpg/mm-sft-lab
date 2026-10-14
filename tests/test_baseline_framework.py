@@ -159,9 +159,13 @@ class FrameworkTests(unittest.TestCase):
             def to(self, device): return self
         inputs = Batch(input_ids=types.SimpleNamespace(shape=(2, 5)),
                        attention_mask=[Tokens([0, 0, 1, 1, 1]), Tokens([1, 1, 1, 1, 1])],
+                       image_grid_thw=Tokens([[1, 2, 2], [1, 4, 2]]),
                        pixel_values=types.SimpleNamespace(numel=lambda: 3))
         backend = object.__new__(QwenBackend)
-        backend.torch = types.SimpleNamespace(cuda=types.SimpleNamespace(synchronize=lambda: None), inference_mode=contextlib.nullcontext)
+        backend.torch = types.SimpleNamespace(cuda=types.SimpleNamespace(
+            synchronize=lambda: None, reset_peak_memory_stats=lambda device: None,
+            max_memory_allocated=lambda device: 1024, max_memory_reserved=lambda device: 2048,
+        ), inference_mode=contextlib.nullcontext)
         backend.processor = Mock()
         backend.processor.tokenizer.pad_token_id = 0
         backend.processor.apply_chat_template.return_value = inputs
@@ -176,6 +180,8 @@ class FrameworkTests(unittest.TestCase):
             result = backend.generate(records[:2], self.data, self.config, [42, 42])
         self.assertEqual([row["response"] for row in result], ["[4, 9]", "[6, 7, 9]"])
         self.assertEqual([row["input_tokens"] for row in result], [3, 5])
+        self.assertEqual([row["pad_tokens"] for row in result], [2, 0])
+        self.assertEqual([row["image_grid_thw"] for row in result], [[[1, 2, 2]], [[1, 4, 2]]])
         self.assertTrue(backend.processor.apply_chat_template.call_args.kwargs["padding"])
         messages = backend.processor.apply_chat_template.call_args.args[0]
         self.assertTrue(Path(messages[0][0]["content"][0]["image"]).is_file())

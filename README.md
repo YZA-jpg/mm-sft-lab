@@ -17,9 +17,11 @@
 
 已确认的数据版本与两端校验统计：[baseline 数据快照](docs/data-snapshot.md)。
 
-当前状态：真实数据已在本地准备完成并传入服务器 `data/imported`，两端校验通过。baseline 框架包含本地 Qwen3-VL / 模型 API 推理、独立 API judge、断点续跑、指标与报告、逐样本比较；64 项离线测试及 mock 全链路通过，框架代码待同步服务器。GPU 推理与在线 judge 尚待验证，SFT 训练入口尚未实现。
+当前状态：真实数据已在本地准备完成并传入服务器 `data/imported`，两端校验通过。baseline 框架提交 `124c9a8` 已同步服务器，原有 64 项离线测试在服务器通过。新增 smoke 验收、同清单 batch 1/4 对照与 48 条小批量入口；GPU 推理环境存在 CUDA 库导入错误，真实推理与在线 judge 待验证，SFT 训练入口尚未实现。
 
 启动说明：[Baseline 框架与服务器流程](docs/baseline.md)。
+
+下一步：[12 条 smoke → batch 1/4 对照 → 48 条小批量操作说明](docs/smoke-tests.md)。
 
 已实现的数据流程：
 
@@ -36,10 +38,11 @@
 
 ```bash
 python scripts/lab.py --help
-# preflight → plan → generate → judge → score → compare
+# preflight → plan → generate → validate-run → judge → score → compare
+# compare-batches：同清单、仅改变 batch size 的生成结果比较
 ```
 
-配置位于 `configs/`：`baseline_smoke.json`、`baseline_full.json`、`siuo_3sample.json`、模型 API 与 judge 示例，以及明确标记的 `mock.json`。API 密钥从环境变量读取；真实服务地址和模型名待服务器运行时配置。
+配置位于 `configs/`：`baseline_smoke.json`、`baseline_smoke_batch4.json`、`baseline_small.json`、`baseline_full.json`、`siuo_3sample.json`、模型 API 与 judge 示例，以及明确标记的 `mock.json`。API 密钥从环境变量读取；真实服务地址和模型名待服务器运行时配置。
 
 在仓库根目录运行离线检查：
 

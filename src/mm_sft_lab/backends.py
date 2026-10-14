@@ -156,6 +156,14 @@ class QwenBackend:
                                                    return_dict=True, return_tensors="pt", padding=True)
         if "pixel_values" not in inputs or inputs["pixel_values"].numel() == 0:
             raise ValueError("Processor did not produce visual inputs")
+        if "image_grid_thw" not in inputs:
+            raise ValueError("Processor did not produce image grids")
+        grids = inputs["image_grid_thw"].tolist()
+        if len(grids) != sum(len(row["media_paths"]) for row in records) or any(
+            len(grid) != 3 or any(type(value) is not int or value <= 0 for value in grid) for grid in grids
+        ):
+            raise ValueError("Processor image grids do not match the requested images")
+        self.torch.cuda.reset_peak_memory_stats(0)
         inputs = inputs.to("cuda:0")
         kwargs = {"max_new_tokens": config["max_new_tokens"], "do_sample": config["do_sample"],
                   "num_return_sequences": 1, "num_beams": 1, "return_dict_in_generate": False, "output_scores": False}
@@ -167,18 +175,28 @@ class QwenBackend:
             generated = self.model.generate(**inputs, **kwargs)
         self.torch.cuda.synchronize()
         elapsed = round((time.perf_counter() - started) * 1000, 3)
+        peak_allocated = self.torch.cuda.max_memory_allocated(0)
+        peak_reserved = self.torch.cuda.max_memory_reserved(0)
         width = inputs["input_ids"].shape[1]
         eos = self.model.generation_config.eos_token_id
         eos_ids = set(eos if isinstance(eos, list) else [eos])
         results = []
+        grid_offset = 0
         for index, sequence in enumerate(generated):
             tokens, reason = trim_completion(sequence[width:].tolist(), eos_ids, self.processor.tokenizer.pad_token_id,
                                              config["max_new_tokens"])
+            input_tokens = int(inputs["attention_mask"][index].sum().item())
+            image_count = len(records[index]["media_paths"])
             results.append({
                 "response": self.processor.decode(tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False),
-                "finish_reason": reason, "input_tokens": int(inputs["attention_mask"][index].sum().item()),
+                "finish_reason": reason, "input_tokens": input_tokens,
                 "output_tokens": len(tokens), "latency_ms": elapsed, "actual_batch_size": len(records),
+                "padded_input_tokens": width, "pad_tokens": width - input_tokens,
+                "image_count": image_count, "image_grid_thw": grids[grid_offset:grid_offset + image_count],
+                "pixel_values_present": True, "peak_cuda_allocated_bytes": peak_allocated,
+                "peak_cuda_reserved_bytes": peak_reserved,
             })
+            grid_offset += image_count
         return results
 
 

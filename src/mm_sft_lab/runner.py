@@ -73,6 +73,7 @@ def generate(config, data_root, run_dir, *, resume=False, retry_errors=False, ba
                 "environment": environment(), "target": target, "data_root": str(data_root),
                 "data_provenance": data_manifest["provenance_status"], "is_mock": config["backend"] == "mock",
                 "responses_per_question": len(config["seeds"]),
+                "oom_batch_splits": 0,
                 "expected_requests": len(records) * len(config["seeds"]),
                 "snapshot_sha256": {name: file_hash(run_dir / name) for name in (
                     "resolved_config.json", "selection.jsonl", "evaluation.jsonl")},
@@ -98,12 +99,14 @@ def generate(config, data_root, run_dir, *, resume=False, retry_errors=False, ba
 
                 def run_batch(batch):
                     rows = [item[0] for item in batch]
+                    batch_started = time.perf_counter()
                     try:
                         results = backend.generate(rows, data_root, config, [item[2] for item in batch])
                         if len(results) != len(batch) or any(not isinstance(result.get("response"), str) for result in results):
                             raise ValueError("Backend result count or text type is invalid")
                     except Exception as error:
                         if type(error).__name__ == "OutOfMemoryError" and len(batch) > 1 and config["backend"] == "qwen3_vl_hf":
+                            manifest["oom_batch_splits"] = manifest.get("oom_batch_splits", 0) + 1
                             error.__traceback__ = None
                             gc.collect()
                             backend.torch.cuda.empty_cache()
@@ -118,11 +121,15 @@ def generate(config, data_root, run_dir, *, resume=False, retry_errors=False, ba
                         fatal = getattr(error, "status_code", None) in (400, 401, 403, 404)
                     else:
                         fatal = False
+                    batch_wall_ms = round((time.perf_counter() - batch_started) * 1000, 3)
+                    batch_id = digest([fingerprint, [(row["id"], index, previous.get((row["id"], index), {}).get("attempt", 0) + 1)
+                                                     for row, index, _ in batch]])[:24]
                     for (row, index, seed), result in zip(batch, results):
                         key = (row["id"], index)
                         attempt = previous.get(key, {}).get("attempt", 0) + 1
                         value = {
                             **result, "id": row["id"], "response_index": index, "seed": seed,
+                            "batch_id": batch_id, "actual_batch_size": len(batch), "batch_wall_ms": batch_wall_ms,
                             "attempt": attempt, "status": result.get("status", "ok"), "recorded_at": now(),
                             "run_fingerprint": fingerprint, "model_fingerprint": target["fingerprint"],
                             "protocol_id": config["protocol_id"], "prompt_sha256": digest(render_text(row)),
