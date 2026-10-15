@@ -1,0 +1,6 @@
+# Proposed training stack, pending server GPU verification. Install CUDA torch separately.
+-r requirements-data.txt
+transformers==4.57.1
+accelerate==1.10.1
+peft==0.17.1
+safetensors==0.6.2

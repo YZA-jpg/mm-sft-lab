@@ -20,4 +20,4 @@ mm-sft-lab = "mm_sft_lab.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-mm_sft_lab = ["MSSBench-LICENSE.txt"]
+mm_sft_lab = ["MSSBench-LICENSE.txt", "MMF-LICENSE.txt"]

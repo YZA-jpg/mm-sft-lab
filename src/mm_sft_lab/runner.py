@@ -8,7 +8,7 @@ from .backends import api_identity, make_backend
 from .benchmarks import PROMPT_VERSION, render_text
 from .common import append_jsonl, digest, file_hash, latest_attempts, now, read_json, read_jsonl, stage_lock, write_json, write_jsonl
 from .data import load_prepared
-from .preflight import code_identity, environment, model_identity
+from .preflight import code_identity, environment, inference_identity
 
 
 def load_run(run_dir):
@@ -43,7 +43,7 @@ def generate(config, data_root, run_dir, *, resume=False, retry_errors=False, ba
     records, labels, data_manifest = load_prepared(data_root, config)
     code = code_identity()
     target = ({"fingerprint": "mock_backend_v1"} if config["backend"] == "mock" else
-              api_identity(config["api"]) if config["backend"] == "chat_api" else model_identity(config["model_path"]))
+              api_identity(config["api"]) if config["backend"] == "chat_api" else inference_identity(config))
     signature = {
         "config": config, "selection_sha256": digest(records), "labels_sha256": digest(labels),
         "prepared_manifest_sha256": file_hash(data_root / "prepared/manifest.json"),
@@ -71,7 +71,7 @@ def generate(config, data_root, run_dir, *, resume=False, retry_errors=False, ba
                 "schema_version": 1, "created_at": now(), "status": "initialized",
                 "run_fingerprint": fingerprint, "signature": signature, "code": code,
                 "environment": environment(), "target": target, "data_root": str(data_root),
-                "data_provenance": data_manifest["provenance_status"], "is_mock": config["backend"] == "mock",
+                "data_provenance": data_manifest["provenance_status"], "is_mock": config["backend"] == "mock" or bool(data_manifest.get("is_mock")),
                 "responses_per_question": len(config["seeds"]),
                 "oom_batch_splits": 0,
                 "expected_requests": len(records) * len(config["seeds"]),

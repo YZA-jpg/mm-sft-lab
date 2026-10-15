@@ -234,7 +234,7 @@ class FrameworkTests(unittest.TestCase):
         backend.generate = generate_with_oom
         backend.torch = types.SimpleNamespace(cuda=types.SimpleNamespace(empty_cache=Mock()))
         config = {**self.config, "backend": "qwen3_vl_hf", "batch_size": 4}
-        with patch("mm_sft_lab.runner.model_identity", return_value={"fingerprint": "fixture-model"}):
+        with patch("mm_sft_lab.runner.inference_identity", return_value={"fingerprint": "fixture-model"}):
             result = generate(config, self.data, self.run, backend_factory=lambda config: backend)
         self.assertEqual(result["status"], "complete")
         self.assertIn(4, sizes)

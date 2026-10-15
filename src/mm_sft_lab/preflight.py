@@ -11,7 +11,7 @@ from .common import digest, file_hash, read_json
 
 def environment():
     packages = {}
-    for name in ("torch", "transformers", "accelerate", "huggingface-hub", "Pillow", "openai"):
+    for name in ("torch", "transformers", "accelerate", "huggingface-hub", "Pillow", "openai", "peft", "safetensors"):
         try:
             packages[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
@@ -71,3 +71,25 @@ def code_identity():
     except (OSError, subprocess.SubprocessError):
         pass
     return {"package_sha256": digest(files), "files": files, "git_commit": commit, "git_dirty": dirty}
+
+
+def adapter_identity(path):
+    root = Path(path).resolve()
+    config = read_json(root / "adapter_config.json")
+    if config.get("peft_type") != "LORA" or not (root / "adapter_model.safetensors").is_file():
+        raise ValueError("Expected a saved safetensors LoRA adapter")
+    files = {name: file_hash(root / name) for name in ("adapter_config.json", "adapter_model.safetensors")}
+    if (root / "training_provenance.json").exists():
+        files["training_provenance.json"] = file_hash(root / "training_provenance.json")
+    return {"path": str(root), "files_sha256": files, "fingerprint": digest(files)}
+
+
+def inference_identity(config):
+    base = model_identity(config["model_path"])
+    if not config.get("adapter_path"):
+        return base
+    adapter = adapter_identity(config["adapter_path"])
+    provenance = Path(config["adapter_path"]) / "training_provenance.json"
+    if not provenance.is_file() or read_json(provenance).get("base_fingerprint") != base["fingerprint"]:
+        raise ValueError("Adapter provenance is missing or names a different base checkpoint")
+    return {"base": base, "adapter": adapter, "fingerprint": digest([base["fingerprint"], adapter["fingerprint"]])}

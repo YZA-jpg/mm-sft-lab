@@ -66,7 +66,7 @@ def _inspect_run(run_dir):
                     batches[row["batch_id"]].append(row)
                 if local:
                     grids = row.get("image_grid_thw")
-                    if (row.get("pixel_values_present") is not True or row.get("image_count") != len(record["media_paths"]) or
+                    if (row.get("pixel_values_present") is not bool(record["media_paths"]) or row.get("image_count") != len(record["media_paths"]) or
                             not isinstance(grids, list) or len(grids) != len(record["media_paths"]) or any(
                                 not isinstance(grid, list) or len(grid) != 3 or any(not _integer(n, 1) for n in grid) for grid in grids)):
                         flags.append("invalid_visual_inputs")

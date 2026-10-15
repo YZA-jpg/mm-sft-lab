@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from .common import read_json
 
-TASKS = ("siuo/gen", "siuo/mcqa", "mssbench/chat", "mssbench/embodied")
+BASELINE_TASKS = ("siuo/gen", "siuo/mcqa", "mssbench/chat", "mssbench/embodied")
+TASKS = BASELINE_TASKS + ("wildjailbreak/harmful", "wildjailbreak/benign", "textvqa/val", "textvqa/test")
 API_DEFAULTS = {
     "base_url_env": "MODEL_BASE_URL", "api_key_env": "MODEL_API_KEY", "model_env": "MODEL_ID",
     "token_parameter": "max_tokens", "send_seed": False, "timeout_seconds": 120,
@@ -16,7 +17,8 @@ DEFAULTS = {
     "dtype": "bfloat16", "attention": "sdpa", "batch_size": 1,
     "max_new_tokens": 1024, "do_sample": False, "seeds": [42],
     "temperature": None, "top_p": None, "top_k": None,
-    "tasks": list(TASKS), "per_task_limit": None, "require_locked_data": True,
+    "tasks": list(BASELINE_TASKS), "per_task_limit": None, "require_locked_data": True,
+    "adapter_path": None,
     "api": API_DEFAULTS,
 }
 
@@ -57,6 +59,8 @@ def load_config(path):
     result = {**DEFAULTS, **value, "api": api_config(value.get("api", {}))}
     if result["schema_version"] != 1 or result["backend"] not in ("qwen3_vl_hf", "chat_api", "mock"):
         raise ValueError("Unsupported schema or backend")
+    if result["adapter_path"] is not None and (result["backend"] != "qwen3_vl_hf" or not isinstance(result["adapter_path"], str) or not result["adapter_path"].strip()):
+        raise ValueError("adapter_path requires a local HF backend and a nonempty path")
     if not isinstance(result["protocol_id"], str) or not result["protocol_id"].strip():
         raise ValueError("protocol_id is required")
     for key in ("batch_size", "max_new_tokens"):

@@ -21,6 +21,10 @@ def render_text(record):
         return CHAT_IF + query
     if task == "mssbench/embodied":
         return EMBODIED_IF + query
+    if record["benchmark"] == "wildjailbreak":
+        return query
+    if record["benchmark"] == "textvqa":
+        return "Answer the question using a short word or phrase.\nQuestion: " + query
     raise ValueError(f"Unsupported task: {task}")
 
 

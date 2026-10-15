@@ -40,6 +40,18 @@ def main(argv=None):
     score = commands.add_parser("score", help="Write coverage-aware metrics, CSV, and Markdown report")
     score.add_argument("--run-dir", type=Path, required=True)
     score.add_argument("--judge-dir", type=Path)
+    review = commands.add_parser("export-review", help="Export semantic tasks for human labeling; no API calls")
+    review.add_argument("--run-dir", type=Path, required=True)
+    review.add_argument("--output", type=Path, required=True)
+    manual = commands.add_parser("import-judgments", help="Import human labels tied to exact responses")
+    manual.add_argument("--run-dir", type=Path, required=True)
+    manual.add_argument("--input", type=Path, required=True)
+    manual.add_argument("--judge-dir", type=Path, required=True)
+    manual.add_argument("--reviewer", default="human")
+    manual.add_argument("--protocol", default="manual_lab_rubric_v1")
+    submission = commands.add_parser("export-textvqa-test", help="Write predictions for official Test scoring")
+    submission.add_argument("--run-dir", type=Path, required=True)
+    submission.add_argument("--output", type=Path, required=True)
     compare = commands.add_parser("compare", help="Compare two complete reports under the same evaluation protocol")
     compare.add_argument("--before", type=Path, required=True)
     compare.add_argument("--after", type=Path, required=True)
@@ -50,10 +62,12 @@ def main(argv=None):
             config = load_config(args.config)
         if args.command == "preflight":
             from .backends import ChatClient
-            from .preflight import environment, inspect_local
+            from .preflight import environment, inspect_local, inference_identity
             result = (inspect_local(config["model_path"]) if config["backend"] == "qwen3_vl_hf" else
                       {"api": ChatClient(config["api"]).identity, "environment": environment()} if config["backend"] == "chat_api" else
                       {"backend": "mock", "is_mock": True, "environment": environment()})
+            if config.get("adapter_path"):
+                result["inference_target"] = inference_identity(config)
         elif args.command == "plan":
             from collections import Counter
             from .data import load_prepared
@@ -88,6 +102,14 @@ def main(argv=None):
             result, output = score_run(args.run_dir, args.judge_dir)
             print(json.dumps({"complete": result["complete"], "is_mock": result["is_mock"], "output": str(output)}, indent=2))
             return 0
+        elif args.command in ("export-review", "import-judgments", "export-textvqa-test"):
+            from .manual_judge import export_review, import_manual, export_textvqa_test
+            if args.command == "export-review":
+                result = export_review(args.run_dir, args.output)
+            elif args.command == "import-judgments":
+                result = import_manual(args.run_dir, args.input, args.judge_dir, reviewer=args.reviewer, protocol=args.protocol)
+            else:
+                result = export_textvqa_test(args.run_dir, args.output)
         else:
             from .metrics import compare_runs
             result = compare_runs(args.before, args.after, args.output)

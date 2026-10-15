@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "judge_protocol_id": "lab_rubric_v1",
+  "max_new_tokens": 512,
+  "temperature": 0,
+  "api": {
+    "base_url_env": "JUDGE_BASE_URL",
+    "model_env": "JUDGE_MODEL",
+    "api_key_env": "DASHSCOPE_API_KEY",
+    "token_parameter": "max_tokens",
+    "extra_body": {"enable_thinking": false}
+  }
+}

@@ -17,11 +17,15 @@
 
 已确认的数据版本与两端校验统计：[baseline 数据快照](docs/data-snapshot.md)。
 
-当前状态：真实数据已在本地准备完成并传入服务器 `data/imported`，两端校验通过。baseline 框架提交 `124c9a8` 已同步服务器，原有 64 项离线测试在服务器通过。新增 smoke 验收、同清单 batch 1/4 对照与 48 条小批量入口；GPU 推理环境存在 CUDA 库导入错误，真实推理与在线 judge 待验证，SFT 训练入口尚未实现。
+当前状态：真实数据已在本地准备完成并传入服务器 `data/imported`，两端校验通过。框架提交 `fb33633` 已同步服务器并通过 83 项离线测试；真实 GPU 推理、12 条诊断和 48 条采样试跑已完成。48/48 生成成功，16 个配对完整，3 条 embodied 截断，重合 12 条回答完全复现。全量 baseline、真实 judge 和 SFT 尚待完成。
+
+Step 1 新工作见 [数据与训练指南](docs/step1-guide.md)：TextVQA/HH/WildJailbreak 已完成真实本地准备；VLGuard 的独立训练快照入口及第三组 LoRA 配置已补齐，真实准备待用户执行。包含只读数据审查、离线测试、人工判分导入、TextVQA 评分，以及单卡 LoRA plan/preflight/audit/smoke/train/恢复入口。真实 GPU 训练和 adapter 重载尚待服务器验证；当前本地修改尚未同步服务器。
+
+数据过滤数量、VLGuard 问答展开方式和训练/评测特殊约定独立记录于 [数据处理与实验说明](docs/data-and-experiment-notes.md)。用户回来后的分阶段命令见 [服务器执行手册](docs/server-runbook.md)，先执行本地 VLGuard 准备阶段。
 
 启动说明：[Baseline 框架与服务器流程](docs/baseline.md)。
 
-下一步：[12 条 smoke → batch 1/4 对照 → 48 条小批量操作说明](docs/smoke-tests.md)。
+当前配置与下一步：[采样 baseline 与服务器实验记录](docs/sampling-baseline.md)。原始诊断入口：[smoke 与批量检查](docs/smoke-tests.md)。
 
 已实现的数据流程：
 
@@ -43,6 +47,8 @@ python scripts/lab.py --help
 ```
 
 配置位于 `configs/`：`baseline_smoke.json`、`baseline_smoke_batch4.json`、`baseline_small.json`、`baseline_full.json`、`siuo_3sample.json`、模型 API 与 judge 示例，以及明确标记的 `mock.json`。API 密钥从环境变量读取；真实服务地址和模型名待服务器运行时配置。
+
+已验证的单次采样设置另存为 `baseline_sampling_smoke.json`、`baseline_sampling_small.json`、`baseline_sampling_full.json`：batch 1、2048 新 token、temperature 0.7、top_p 0.8、top_k 20、基础 seed 42。MCQA 可直接本地评分；开放回答的人工、本地或 API 判分方式尚待确定。
 
 在仓库根目录运行离线检查：
 

@@ -34,8 +34,10 @@ def load_prepared(data_root, config):
             raise ValueError(f"Unexpected model-input fields in {row['id']}")
         if f"{row['benchmark']}/{row['task']}" not in TASKS or not isinstance(row["query"], str) or not row["query"].strip():
             raise ValueError(f"Invalid prepared input: {row['id']}")
-        if not isinstance(row["media_paths"], list) or not row["media_paths"]:
+        if not isinstance(row["media_paths"], list) or (row["benchmark"] != "wildjailbreak" and not row["media_paths"]):
             raise ValueError(f"No images in {row['id']}")
+        if row["benchmark"] == "wildjailbreak" and row["media_paths"]:
+            raise ValueError("WildJailbreak is text-only; do not attach placeholder images")
         for name in row["media_paths"]:
             relative = PurePosixPath(name)
             path = (root / name).resolve()
@@ -55,6 +57,9 @@ def load_prepared(data_root, config):
         if len({(row["task"], row["source_scene_id"]) for row in members}) != 1:
             raise ValueError(f"Inconsistent MSSBench pair identity: {pair_id}")
     selected = select_records(inputs, config["tasks"], config["per_task_limit"])
+    missing_tasks = set(config["tasks"]) - {f"{row['benchmark']}/{row['task']}" for row in selected}
+    if missing_tasks:
+        raise ValueError(f"Prepared snapshot has no requests for: {sorted(missing_tasks)}")
     if not selected:
         raise ValueError("Selection is empty")
     return selected, [label_map[row["id"]] for row in selected], manifest

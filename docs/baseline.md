@@ -1,8 +1,8 @@
 # Baseline 框架与服务器启动流程
 
-当前已实现可执行框架，并通过离线测试；真实 Qwen 模型加载、GPU 推理和在线 judge 仍待服务器验证。用户稍后回来时按下面阶段逐步执行并反馈输出。
+当前框架已在服务器通过 83 项离线测试，完成真实 Qwen 模型加载、GPU smoke 与 48 条采样试跑。真实 judge 和全量评测待完成；最新参数、实验记录与下一阶段见 [采样 baseline](sampling-baseline.md)。
 
-本轮新增的分阶段操作以 [smoke 与小批量说明](smoke-tests.md) 为准：12 条 batch 1、同清单 batch 4 对照、48 条小批量。现有 `ipiguard-py310` 的 torch 导入失败，推理环境就绪前只执行选样和离线检查。
+下面保留通用接口与初始环境准备流程。`scripts/run_checks.sh` 运行原 greedy 配置；最新已验证的采样设置使用 `configs/baseline_sampling_*.json`。已完成的阶段无需重复运行。
 
 ## 入口与目录
 
@@ -60,11 +60,11 @@ python scripts/lab.py score --run-dir runs/demo --judge-dir runs/demo/judge
 
 ## 服务器已知状态
 
-- 仓库：`/data1/yaoziao/mm-sft-lab`；已确认服务器同步到 baseline 框架提交 `124c9a8`。
+- 仓库：`/data1/yaoziao/mm-sft-lab`；已确认服务器同步到 `fb33633`。
 - 本地模型：`/data1/sharehub/models/Qwen3-VL-4B-Instruct`，目录及 config 可访问。
-- 物理 GPU 7：A100-SXM4-80GB；最新一次用户检查为 48,700 MiB 空闲，运行前重新查询。
-- 服务器 base 的 Python 是 3.14；数据环境使用仓库内 `.venv-data`，原有 64 项测试已通过。
-- 已有 `ipiguard-py310` 为 Python 3.10.21、torch 2.5.1+cu124、Transformers 4.48.0，导入 torch 报 `__nvJitLinkComplete_12_4` 动态库错误；目前不修改该环境，独立推理环境尚待验证。
+- 物理 GPU 7：A100-SXM4-80GB；此前用户检查为 81,124 MiB 空闲，运行前重新查询。
+- 服务器 base 的 Python 是 3.14；数据环境 `.venv-data` 使用 Python 3.11，83 项离线测试已通过。
+- 旧 `ipiguard-py310` 导入 torch 报 CUDA 动态库错误；独立推理环境 `.venv` 已跑通，使用 torch 2.8.0+cu128、torchvision 0.23.0、Transformers 4.57.1。真实 judge 尚未配置。
 - 服务器直接下载曾因 `[Errno 110] Connection timed out` 失败；已在本地完成下载与校验，并通过 `tstar_001` 上传约 441 MB 的离线包，服务器 SHA-256 校验通过。
 - 服务器数据目录：`/data1/yaoziao/mm-sft-lab/data/imported`；离线图片/标注/配对复核通过，统计与本地一致。后续评测命令使用 `--data-root data/imported`。
 

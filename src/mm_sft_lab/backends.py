@@ -11,7 +11,7 @@ from urllib.request import url2pathname
 
 from .benchmarks import messages_for
 from .common import digest
-from .preflight import environment, inspect_local
+from .preflight import environment, inspect_local, inference_identity
 
 
 def api_identity(config):
@@ -131,7 +131,10 @@ def trim_completion(tokens, eos_ids, pad_id, maximum):
 class QwenBackend:
     def __init__(self, config):
         self.metadata = {"backend": "qwen3_vl_hf", "is_mock": False, **inspect_local(config["model_path"])}
-        self.metadata["fingerprint"] = self.metadata["model"]["fingerprint"]
+        target = inference_identity(config)
+        self.metadata["fingerprint"] = target["fingerprint"]
+        if config.get("adapter_path"):
+            self.metadata["adapter"] = target["adapter"]
         import torch
         from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
         self.torch = torch
@@ -141,6 +144,10 @@ class QwenBackend:
             config["model_path"], dtype=torch.bfloat16, attn_implementation=config["attention"],
             device_map={"": 0}, local_files_only=True, trust_remote_code=False,
         ).eval()
+        if config.get("adapter_path"):
+            from peft import PeftModel
+            self.model = PeftModel.from_pretrained(self.model, config["adapter_path"], is_trainable=False,
+                                                 local_files_only=True).eval()
         self.metadata["processor"] = json.loads(self.processor.to_json_string())
         self.metadata["image_processor"] = json.loads(self.processor.image_processor.to_json_string())
         self.metadata["chat_template"] = self.processor.chat_template
@@ -154,12 +161,13 @@ class QwenBackend:
         conversations = [messages_for(row, data_root, file_uris=False) for row in records]
         inputs = self.processor.apply_chat_template(conversations, tokenize=True, add_generation_prompt=True,
                                                    return_dict=True, return_tensors="pt", padding=True)
-        if "pixel_values" not in inputs or inputs["pixel_values"].numel() == 0:
+        requested_images = sum(len(row["media_paths"]) for row in records)
+        if requested_images and ("pixel_values" not in inputs or inputs["pixel_values"].numel() == 0):
             raise ValueError("Processor did not produce visual inputs")
-        if "image_grid_thw" not in inputs:
+        if requested_images and "image_grid_thw" not in inputs:
             raise ValueError("Processor did not produce image grids")
-        grids = inputs["image_grid_thw"].tolist()
-        if len(grids) != sum(len(row["media_paths"]) for row in records) or any(
+        grids = inputs["image_grid_thw"].tolist() if "image_grid_thw" in inputs else []
+        if len(grids) != requested_images or any(
             len(grid) != 3 or any(type(value) is not int or value <= 0 for value in grid) for grid in grids
         ):
             raise ValueError("Processor image grids do not match the requested images")
@@ -193,7 +201,7 @@ class QwenBackend:
                 "output_tokens": len(tokens), "latency_ms": elapsed, "actual_batch_size": len(records),
                 "padded_input_tokens": width, "pad_tokens": width - input_tokens,
                 "image_count": image_count, "image_grid_thw": grids[grid_offset:grid_offset + image_count],
-                "pixel_values_present": True, "peak_cuda_allocated_bytes": peak_allocated,
+                "pixel_values_present": bool(image_count), "peak_cuda_allocated_bytes": peak_allocated,
                 "peak_cuda_reserved_bytes": peak_reserved,
             })
             grid_offset += image_count

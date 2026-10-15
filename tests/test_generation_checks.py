@@ -185,7 +185,7 @@ class GenerationCheckTests(unittest.TestCase):
     def test_visual_grid_difference_is_visible_even_when_text_matches(self):
         backend = self.fake_local_backend()
         self.config["backend"] = "qwen3_vl_hf"
-        with patch("mm_sft_lab.runner.model_identity", return_value={"fingerprint": "fixture-model"}):
+        with patch("mm_sft_lab.runner.inference_identity", return_value={"fingerprint": "fixture-model"}):
             self.generated(backend_factory=lambda config: backend)
             self.generated(batched=True, backend_factory=lambda config: backend)
         self.edit_predictions(lambda rows: rows[0].update(image_grid_thw=[[1, 4, 2]]), self.after)
@@ -208,7 +208,7 @@ class GenerationCheckTests(unittest.TestCase):
     def test_local_telemetry_checks_detect_missing_vision_and_bad_padding(self):
         backend = self.fake_local_backend()
         self.config["backend"] = "qwen3_vl_hf"
-        with patch("mm_sft_lab.runner.model_identity", return_value={"fingerprint": "fixture-model"}):
+        with patch("mm_sft_lab.runner.inference_identity", return_value={"fingerprint": "fixture-model"}):
             self.generated(backend_factory=lambda config: backend)
         result = validate_run(self.before)
         self.assertEqual(result["status"], "passed")
@@ -229,7 +229,7 @@ class GenerationCheckTests(unittest.TestCase):
                 raise OutOfMemoryError("fixture pressure")
             return normal(records, root, config, seeds)
         backend.torch = types.SimpleNamespace(cuda=types.SimpleNamespace(empty_cache=Mock()))
-        with patch("mm_sft_lab.runner.model_identity", return_value={"fingerprint": "fixture-model"}):
+        with patch("mm_sft_lab.runner.inference_identity", return_value={"fingerprint": "fixture-model"}):
             self.generated(backend_factory=lambda config: backend)
             backend.generate = fail_batch
             manifest = self.generated(batched=True, backend_factory=lambda config: backend)
