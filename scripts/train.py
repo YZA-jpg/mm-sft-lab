@@ -6,16 +6,16 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from mm_sft_lab.training_data import load_train_config, token_audit, train_plan
+from mm_sft_lab.training_data import load_train_config, processor_check, token_audit, train_plan
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("plan", "preflight", "audit", "smoke", "train", "merge"):
+    for name in ("plan", "preflight", "processor-check", "audit", "smoke", "train", "merge"):
         command = commands.add_parser(name)
         command.add_argument("--config", type=Path, required=True)
-        if name not in ("preflight", "merge"):
+        if name not in ("preflight", "processor-check", "merge"):
             command.add_argument("--data-root", type=Path, default=Path("data/step1"))
         if name in ("audit", "smoke", "train", "merge"):
             command.add_argument("--output", type=Path, required=True)
@@ -33,6 +33,8 @@ def main():
         config = load_train_config(args.config)
         if args.command == "plan":
             result = train_plan(args.data_root, config)
+        elif args.command == "processor-check":
+            result = processor_check(config)
         elif args.command == "audit":
             result = token_audit(args.data_root, config, args.output, limit=args.limit)
         else:

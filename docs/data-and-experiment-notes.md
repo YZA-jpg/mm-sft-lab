@@ -158,3 +158,15 @@ SIUO gen 的自动 judge 需要视觉输入；MSS/Wild 当前 rubric 使用文�
 当前没有完整 B0、安全判分或真实 SFT 结果；以上是已实现处理、用户选择和待验证协议的记录。
 
 2026-10-16 judge 服务补充：用户提供 DashScope 的 `deepseek-v4.1-flash` 配置；已登记 [独立连接说明](judge-dashscope.md)，服务与图片输入尚未实际验证。先传输数据，优先在本地调用 judge；不因此修改已冻结的生成参数或数据快照。
+
+## 10. 服务器导入与训练环境准备记录
+
+2026-10-16 用户已推送并在服务器同步 `b621c47`，上传 `step1-all-20261016-004857.tar.gz`（约 16 GB）并通过 SHA256；导入根 `data/step1-imported-v1` 的三组只读审查通过，`violations=[]`。VLGuard 子 manifest 为 `12861f4c9e968ba45b1ca30e9a56320570d68ebdbdcf2f7c5edadd9a0c2dfd71`；其引用文件路径 1,999 个，按文件 SHA256 去重为 1,996 个，样本仍为 2,977 条。
+
+原推理 Conda 环境 `.venv` 检测通过：Python 3.11.17、torch 2.8.0+cu128、torchvision 0.23.0+cu128、Transformers 4.57.1、Accelerate 1.15.0、safetensors 0.8.0、huggingface-hub 0.36.2、Pillow 12.3.0；CUDA/BF16、Qwen 导入和 pip check 正常。随后用户已用 `--clone --offline --copy` 创建 `.venv-train`，上传并仅安装 PEFT 0.17.1 的通用 wheel；pip check 与训练 preflight 均通过，状态为 `environment_ready_not_training_verified`。此检查没有加载训练权重或更新参数。
+
+保留检测到的 Accelerate 1.15.0 / safetensors 0.8.0，替代早期尚未实测的 1.10.1 / 0.6.2 提议；`requirements-train.txt` 已相应更新。这仅调整依赖起点，用户指定的 LoRA、学习率、epoch、有效 batch 和序列长度不变。PEFT 导入已通过，GPU 训练仍须逐阶段验证。[PEFT 0.17.1 依赖声明](https://github.com/huggingface/peft/blob/v0.17.1/setup.py)
+
+首次 TextVQA 64 条 CPU token 预审在 processor 配置检查处停止，报 `Processor did not apply the explicit training pixel budget`，未进入样本编码或训练。定位到加载参数的兼容性缺口：Transformers 4.57.1 可在构造后单独更新 `min_pixels/max_pixels`，`size` 保持 checkpoint 值；原检查只比较后者。训练入口现统一这三处设置并要求启用 resize，像素面积 65,536–1,048,576 和总序列 4096 保持不变，评测入口不修改。[加载实现](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/image_processing_base.py)
+
+新增 `train.py processor-check` 使用两张合成图片验证实际 `image_grid_thw` 对应的缩放面积，覆盖放大和缩小，且不加载模型权重、数据集或 API。字段不同步的离线复现与边界测试通过，全套 159 项离线测试通过；真实 Qwen processor 探针及三组 64 条预审须在用户同步修复后重跑。此前失败日志保留，不能记作 token 审计通过。

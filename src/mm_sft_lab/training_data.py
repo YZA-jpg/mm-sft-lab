@@ -163,13 +163,59 @@ def encode_training_record(processor, row, root, config):
 
 def load_processor(config):
     from transformers import AutoProcessor
-    processor = AutoProcessor.from_pretrained(config["model_path"], local_files_only=True, trust_remote_code=False,
-                                             min_pixels=config["image_min_pixels"], max_pixels=config["image_max_pixels"])
+    processor = AutoProcessor.from_pretrained(config["model_path"], local_files_only=True, trust_remote_code=False)
     processor.tokenizer.padding_side = "right"
-    size = processor.image_processor.size
-    if size["shortest_edge"] != config["image_min_pixels"] or size["longest_edge"] != config["image_max_pixels"]:
-        raise ValueError("Processor did not apply the explicit training pixel budget")
+    image = processor.image_processor
+    if not getattr(image, "do_resize", False):
+        raise ValueError("Training image processor must enable resize for the explicit pixel budget")
+    # In Transformers 4.57.1, from_dict can set legacy min/max attributes after
+    # construction without updating size. Slow and fast Qwen processors consult
+    # different fields, so synchronize the image component before its first call.
+    expected = {"shortest_edge": config["image_min_pixels"], "longest_edge": config["image_max_pixels"]}
+    image.size = dict(expected)
+    image.min_pixels = expected["shortest_edge"]
+    image.max_pixels = expected["longest_edge"]
+    if (image.size != expected or image.min_pixels != expected["shortest_edge"] or
+            image.max_pixels != expected["longest_edge"]):
+        raise ValueError(f"Processor did not apply the training pixel budget: expected={expected}, "
+                         f"size={image.size}, min_pixels={image.min_pixels}, max_pixels={image.max_pixels}")
     return processor
+
+
+def processor_check(config, *, processor=None):
+    """Check actual image resizing with synthetic inputs; never load model weights."""
+    from PIL import Image
+    processor = processor or load_processor(config)
+    image = processor.image_processor
+    patch, merge = image.patch_size, image.merge_size
+    if type(patch) is not int or type(merge) is not int or patch < 1 or merge < 1:
+        raise ValueError("Invalid processor patch_size/merge_size")
+    minimum, maximum = config["image_min_pixels"], config["image_max_pixels"]
+    sides = (max(1, min(64, math.isqrt(minimum) // 2)), max(2048, 2 * math.isqrt(maximum)))
+    probes = []
+    for side in sides:
+        with Image.new("RGB", (side, side), (128, 128, 128)) as probe:
+            encoded = image(images=probe, return_tensors="pt")
+        grids = encoded.get("image_grid_thw")
+        grids = grids.tolist() if hasattr(grids, "tolist") else grids
+        if (not isinstance(grids, list) or len(grids) != 1 or len(grids[0]) != 3 or
+                any(type(value) is not int or value < 1 for value in grids[0])):
+            raise ValueError("Processor probe did not return one valid image_grid_thw")
+        temporal, height, width = grids[0]
+        if temporal != 1 or height % merge or width % merge:
+            raise ValueError(f"Processor probe has an unexpected still-image grid: {grids[0]}")
+        pixels = height * width * patch * patch
+        if not minimum <= pixels <= maximum:
+            raise ValueError(f"Processor resize probe outside training pixel budget: "
+                             f"input={side}x{side}, grid={grids[0]}, pixels={pixels}, budget={minimum}..{maximum}")
+        probes.append({"input_size": [side, side], "image_grid_thw": grids[0],
+                       "resized_size": [width * patch, height * patch], "resized_pixels": pixels,
+                       "visual_tokens": temporal * height * width // (merge * merge)})
+    return {"schema_version": 1, "status": "passed", "synthetic_images": True,
+            "scope": "Image processor resizing only; no model weights, training, datasets or API calls",
+            "image_processor": type(image).__name__, "size": dict(image.size),
+            "min_pixels": image.min_pixels, "max_pixels": image.max_pixels,
+            "patch_size": patch, "merge_size": merge, "probes": probes}
 
 
 def tokenization_environment():

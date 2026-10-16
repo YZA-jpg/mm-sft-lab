@@ -114,18 +114,33 @@ Write-Host "实际包名：$bundle"
 
 根据结果单独配置 `.venv-train`，保留已通过推理验证的 `.venv`。起始依赖见 `requirements-train.txt`；Torch/CUDA 不由该文件安装，目标为现有已验证的 torch 2.8.0+cu128 / torchvision 0.23.0 和 Python 3.11。服务器无数据源网络时需要匹配 Linux x86_64、CPython 3.11 的离线 wheel，不能复制 Windows venv。安装方案在此检测结果后确定，不把未经验证的环境创建命令混入 smoke。
 
+2026-10-16 用户已完成 Conda `--clone --offline --copy` 创建 `.venv-train`，上传 PEFT 0.17.1 的通用 `py3-none-any.whl` 并以 `pip --no-index --no-deps` 单独安装；pip check 和 train preflight 通过。保留原环境的 Accelerate 1.15.0 / safetensors 0.8.0。真实训练尚未验证，具体状态见独立记录第 10 节。
+
 后续示例都以已配置成功的 `.venv-train/bin/python` 为准。安装 PEFT 等依赖应在全量 B0 前完成，B0 与 adapter 复评使用同一冻结环境。
 
 ## F. 服务器：完整 token 审计
 
-独立阶段，不更新模型。首先运行 `.venv-train/bin/python scripts/train.py preflight --config configs/train/textvqa_lora.json` 检查 CUDA/BF16/PEFT。随后三组分别 audit；示例是 TextVQA：
+独立阶段，不更新模型。环境检查通过后先检查 processor，再做各组 64 条预审，最后才进入完整 audit。2026-10-16 首次预审因像素预算字段不同步停止；同步修复后独立运行下面的 CPU 探针，并查看结果：
 
 ```bash
 (
   set -euo pipefail
   cd /data1/yaoziao/mm-sft-lab
   unset LD_LIBRARY_PATH LD_PRELOAD PYTHONPATH PYTHONHOME
-  export PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+  export PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=""
+  export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false
+  .venv-train/bin/python scripts/train.py processor-check --config configs/train/textvqa_lora.json
+)
+```
+
+探针应返回 `passed`，两张合成图片的实际 `resized_pixels` 均在 65,536–1,048,576 内；它仅检查图像缩放，不证明完整 chat 编码或训练通过。再将下方 audit 命令增加 `--limit 64`，对三组各自使用新的输出目录预审。通过后去掉 limit 进行完整审计；示例是 TextVQA：
+
+```bash
+(
+  set -euo pipefail
+  cd /data1/yaoziao/mm-sft-lab
+  unset LD_LIBRARY_PATH LD_PRELOAD PYTHONPATH PYTHONHOME
+  export PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES="" HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
   .venv-train/bin/python scripts/train.py audit --config configs/train/textvqa_lora.json \
     --data-root data/step1-imported-v1 --output runs/token-audit-textvqa-v1
 )
