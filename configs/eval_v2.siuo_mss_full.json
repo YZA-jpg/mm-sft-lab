@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "protocol_id": "evaluation_v2_draft_20261021_siuo_mss_stream",
+  "protocol_status": "provisional",
+  "benchmarks": ["siuo", "mssbench"],
+  "target": {"base_url": "http://127.0.0.1:18004/v1"},
+  "execution": {
+    "generation_concurrency": 4,
+    "generation_stream": true,
+    "timeout_seconds": 600,
+    "per_benchmark_limit": null
+  }
+}

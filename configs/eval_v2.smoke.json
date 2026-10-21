@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "protocol_id": "evaluation_v2_draft_20261021_smoke",
+  "protocol_status": "provisional",
+  "execution": {
+    "generation_concurrency": 1,
+    "generation_stream": true,
+    "timeout_seconds": 600,
+    "deepseek_concurrency": 1,
+    "wildguard_concurrency": 1,
+    "per_benchmark_limit": 2
+  }
+}

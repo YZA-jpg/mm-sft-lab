@@ -1,0 +1,6 @@
+{
+  "schema_version": 2,
+  "protocol_id": "evaluation_v2_draft_20261021",
+  "protocol_status": "provisional",
+  "execution": {"generation_concurrency": 4, "generation_stream": true, "timeout_seconds": 600}
+}

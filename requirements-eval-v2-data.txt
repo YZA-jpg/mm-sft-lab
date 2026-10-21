@@ -1,0 +1,4 @@
+# Keep old inference/training environments unchanged.
+Pillow>=10.3,<13
+huggingface-hub>=0.36,<1
+pyarrow>=19,<24
