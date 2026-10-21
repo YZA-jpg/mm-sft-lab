@@ -101,9 +101,11 @@ def completion(base_url, payload, timeout, offset=0, on_attempt=None, *, opener=
     result = {"status": "error", "error_kind": "network_retry_exhausted", "response": None,
               "finish_reason": None, "usage": {}}
     for index in range(offset, 6):
-        result.update(http_status=None)
+        result.update(http_status=None, error=None)
+        exception_class, reason_class = None, None
+        attempt_started_at = now()
         if on_attempt:
-            on_attempt({"number": index + 1, "started_at": now()})
+            on_attempt({"number": index + 1, "started_at": attempt_started_at})
         tick, retry = time.perf_counter(), False
         request = urllib.request.Request(base_url + "/chat/completions",
             data=json.dumps(payload, ensure_ascii=False).encode(), headers={"Content-Type": "application/json"})
@@ -121,6 +123,7 @@ def completion(base_url, payload, timeout, offset=0, on_attempt=None, *, opener=
                     finish_reason=choice.get("finish_reason"), usage=body.get("usage") or {},
                     provider_response_id=body.get("id"), provider_model=body.get("model"))
         except urllib.error.HTTPError as error:
+            exception_class = type(error).__name__
             detail = error.read().decode("utf-8", errors="replace")[:2000]
             lowered = detail.lower()
             guard = any(code in lowered for code in ("data_inspection_failed", "content_filter", "safety_violation"))
@@ -128,12 +131,17 @@ def completion(base_url, payload, timeout, offset=0, on_attempt=None, *, opener=
             result.update(status="error", response=None, error_kind="provider_guardrail" if guard else "network_error" if retry else "http_error",
                           error=detail, http_status=error.code)
         except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead, OSError) as error:
+            exception_class = type(error).__name__
+            reason_class = type(error.reason).__name__ if isinstance(error, urllib.error.URLError) else None
             retry = True
             result.update(status="error", response=None, error_kind="network_error", error=f"{type(error).__name__}: {error}")
         except (ValueError, KeyError, IndexError, TypeError) as error:
+            exception_class = type(error).__name__
             result.update(status="error", response=None, error_kind="format_error", error=f"{type(error).__name__}: {error}")
-        attempts.append({"number": index + 1, "wall_seconds": time.perf_counter() - tick,
-                         "status": result["status"], "error_kind": result["error_kind"]})
+        attempts.append({"number": index + 1, "started_at": attempt_started_at, "finished_at": now(),
+            "wall_seconds": time.perf_counter() - tick, "status": result["status"],
+            "error_kind": result["error_kind"], "exception_class": exception_class,
+            "reason_class": reason_class, "http_status": result.get("http_status"), "error": result.get("error")})
         if not retry or index == 5:
             break
         delay = min(30, 2 ** index)

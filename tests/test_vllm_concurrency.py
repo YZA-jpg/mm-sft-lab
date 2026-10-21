@@ -151,6 +151,23 @@ class ConcurrencyTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     profile.main(["--levels", *levels])
 
+    def test_throughput_pools_work_and_time_instead_of_averaging_round_rates(self):
+        trials = []
+        for level, durations in ((1, (1, 9)), (2, (2, 2))):
+            for duration in durations:
+                trials.append({"concurrency": level, "performance_comparable": True,
+                    "successful_requests": 7, "expected_requests": 7, "wall_seconds": duration,
+                    "successful_requests_per_second": 7 / duration, "output_tokens": 70,
+                    "output_tokens_per_second": 70 / duration, "issue_counts": {}})
+        serial, parallel = profile.comparison(trials, [1, 2], 2)
+        self.assertEqual(serial["total_wall_seconds"], 10)
+        self.assertAlmostEqual(serial["pooled_requests_per_second"], 1.4)
+        self.assertEqual(serial["pooled_output_tokens_per_second"], 14)
+        self.assertGreater(serial["median_requests_per_second"], parallel["median_requests_per_second"])
+        self.assertAlmostEqual(parallel["request_throughput_relative_to_c1"], 2.5)
+        incomplete = profile.comparison(trials[:1], [1], 2)[0]
+        self.assertIsNone(incomplete["pooled_requests_per_second"])
+
 
 if __name__ == "__main__":
     unittest.main()

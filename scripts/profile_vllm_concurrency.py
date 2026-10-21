@@ -159,17 +159,25 @@ def comparison(trials, levels, rounds):
         complete = len(valid) == rounds
         rates = [row["successful_requests_per_second"] for row in valid]
         token_rates = [row["output_tokens_per_second"] for row in valid if row["output_tokens_per_second"] is not None]
+        wall = sum(row["wall_seconds"] for row in values)
+        successes = sum(row["successful_requests"] for row in values)
+        tokens_known = complete and all(row["output_tokens"] is not None for row in valid)
+        tokens = sum(row["output_tokens"] for row in valid) if tokens_known else None
         results.append({"concurrency": level, "completed_rounds": len(values), "valid_rounds": len(valid),
             "requested_rounds": rounds, "performance_comparable": complete,
-            "successful_requests": sum(r["successful_requests"] for r in values),
+            "successful_requests": successes,
             "expected_requests": sum(r["expected_requests"] for r in values),
+            "total_wall_seconds": wall,
+            "pooled_requests_per_second": successes / wall if complete and wall > 0 else None,
+            "total_output_tokens": tokens,
+            "pooled_output_tokens_per_second": tokens / wall if tokens is not None and wall > 0 else None,
             "median_wall_seconds": statistics.median(r["wall_seconds"] for r in valid) if complete else None,
             "median_requests_per_second": statistics.median(rates) if complete else None,
             "median_output_tokens_per_second": statistics.median(token_rates) if complete and len(token_rates) == rounds else None,
             "truncated_responses": sum(r["issue_counts"].get("truncated", 0) for r in values)})
-    baseline = next((r["median_requests_per_second"] for r in results if r["concurrency"] == 1), None)
+    baseline = next((r["pooled_requests_per_second"] for r in results if r["concurrency"] == 1), None)
     for row in results:
-        rate = row["median_requests_per_second"]
+        rate = row["pooled_requests_per_second"]
         row["request_throughput_relative_to_c1"] = rate / baseline if baseline and rate is not None else None
     return results
 
@@ -224,6 +232,7 @@ def execute(args):
                 "judge_calls": 0, "server_readiness_wait_seconds": manifest.get("server_readiness_wait_seconds"),
                 "trials": trials, "comparison": rows,
                 "notes": ["Same image bytes/prompts at every level; responses and lengths can vary under server defaults.",
+                    "Primary throughput is total successful requests (or output tokens) divided by summed measured wall time; per-round rate medians are descriptive only.",
                     "Warmup and readiness are excluded from measured trial time. GPU snapshots cover the whole shared card.",
                     "This small shared-GPU experiment does not establish linear multi-GPU speedup.",
                     "Interrupted runs retain outputs but must not be combined into a timing trial."]})

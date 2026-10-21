@@ -166,6 +166,36 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(result["error_kind"], "provider_guardrail")
 
+    def test_successful_retry_retains_timeout_details_and_request_body(self):
+        calls = []
+        def opener(request, **kwargs):
+            calls.append(json.loads(request.data))
+            if len(calls) == 1:
+                raise TimeoutError("timed out while waiting for a local response")
+            return response()
+        result = smoke.completion("http://127.0.0.1:18000/v1", {"model": "target", "messages": []}, 600,
+                                  opener=opener, sleeper=lambda _: None)
+        self.assertEqual(result["status"], "ok")
+        self.assertIsNone(result["error"])
+        first, second = result["attempts"]
+        self.assertEqual(first["exception_class"], "TimeoutError")
+        self.assertIn("timed out", first["error"])
+        self.assertTrue(first["started_at"])
+        self.assertTrue(first["finished_at"])
+        self.assertEqual(first["backoff_seconds"], 1)
+        self.assertEqual(second["http_status"], 200)
+        self.assertIsNone(second["exception_class"])
+        self.assertEqual(calls, [{"model": "target", "messages": []}] * 2)
+
+    def test_wrapped_connection_error_preserves_underlying_exception_class(self):
+        def opener(*args, **kwargs):
+            raise urllib.error.URLError(ConnectionRefusedError("local server unavailable"))
+        result = smoke.completion("http://127.0.0.1:18000/v1", {"model": "target", "messages": []}, 600,
+                                  opener=opener, sleeper=lambda _: None)
+        self.assertEqual(len(result["attempts"]), 6)
+        self.assertEqual(result["attempts"][0]["exception_class"], "URLError")
+        self.assertEqual(result["attempts"][0]["reason_class"], "ConnectionRefusedError")
+
     def test_seven_requests_outputs_resume_and_timing_without_any_judge(self):
         run = self.root / "run"
         calls = []

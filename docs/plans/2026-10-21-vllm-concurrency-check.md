@@ -24,3 +24,48 @@ The seven-request GPU 4 smoke completed with seven `stop` responses. The pasted 
 `C:\anaconda3\python.exe -m unittest discover -s tests -p "test_vllm*.py" -v`: 17 tests passed (11 existing launcher/smoke tests and 6 new concurrency tests). No real GPU, server SSH, model inference or paid judge calls were executed locally. Launcher, smoke client and old `src/mm_sft_lab` code remain unchanged by this addition.
 
 On the server, reuse `runs/vllm-gpu4-port18004` and `data/step1-imported-v1`. The default comparison sends 84 measured requests plus one excluded warmup request. Inspect `comparison.csv` and each trial's `summary.json`; interpret throughput together with actual output token lengths and shared-device snapshots.
+
+## Throughput aggregation correction
+
+The first real comparison completed 28/28 requests at each concurrency, with no recorded truncation. Large between-round variation exposed an interpretation problem: the median of round request rates is not the rate for the combined experiment. With two rounds, the median is their arithmetic mean; averaging reciprocals overweights the faster round.
+
+Keep per-round descriptive medians, but use pooled throughput (total successful requests divided by total measured wall time) for the main comparison and the speedup relative to concurrency 1. Add the corresponding pooled output-token throughput only when token counts are available for every valid round. Require all requested rounds to be valid before reporting pooled comparison rates.
+
+From the user's original CSV, two rounds imply total measured durations of 1969.3094, 1849.9815 and 649.7686 seconds for concurrency 1, 2 and 4. Pooled rates are respectively 0.0142182, 0.0151353 and 0.0430923 requests/s; concurrency 4 is about 3.0308 times concurrency 1 in this small run. The original files stay unchanged. Read per-round summaries and completion attempts to distinguish output length, retries and shared-GPU effects; do not rerun inference just to recalculate statistics. Final HTTP success does not prove there were no earlier failed attempts.
+
+Added a regression with uneven round durations that would reverse the conclusion under rate averaging. The targeted launcher/smoke/concurrency suite now contains 18 offline tests.
+
+## Analysis of real per-attempt records
+
+The user's follow-up records confirm that the six measured trials completed all 84 logical requests but incurred eight failed HTTP attempts, each lasting approximately 600 seconds before a successful retry. Thus the measured phases made 92 HTTP attempts (warmup excluded); six logical requests needed retries. This is a client transport observation, not a judge refusal or a target safety failure.
+
+| Trial | Concurrency | Measured seconds | Final successful output tokens | Failed attempts |
+| --- | ---: | ---: | ---: | ---: |
+| Round 1 | 1 | 83.99 | 5519 | 0 |
+| Round 1 | 2 | 1227.94 | 6183 | 3 |
+| Round 1 | 4 | 618.15 | 6065 | 1 |
+| Round 2 | 4 | 31.62 | 6539 | 0 |
+| Round 2 | 2 | 622.04 | 6073 | 1 |
+| Round 2 | 1 | 1885.31 | 6172 | 3 |
+
+The retry-free serial and concurrency-4 trials show about 0.167 versus 0.443 requests/s, and 65.7 versus 206.8 output tokens/s. These are promising observations from two different rounds, not a controlled estimate of steady-state speedup. Final successful token totals do not include generation during failed attempts. Do not subtract 600 seconds per failed attempt from concurrent phase wall time: attempts overlap and may have induced additional server work.
+
+Repeated slow IDs include `mssbench/embodied/0000/1/a#g0` and `mssbench/chat/0000/1/a#g0`; one further slow request was `mssbench/embodied/0000/0/a#g0`. The server endpoint is localhost, and no DeepSeek calls occurred. The old generic `network_error` classification does not identify the underlying exception, prove external network loss, or distinguish a response wait from a long/queued generation. Snapshot GPU utilization/memory covers the whole shared card and includes preallocated KV cache; it cannot locate the cause of a particular stall.
+
+Extend completion attempts with start/end timestamps, exception class, wrapped urllib reason class, HTTP status and error text. Preserve the initial-plus-five retry budget and request body containing only model/messages. These diagnostics apply to future calls and cannot recover missing details from past failed attempts. Updating the smoke client changes its recorded code hash; leave completed artifacts intact and use a fresh profiling directory for any future measurement.
+
+For the eventual ASR@k table, keep logical trial indices separate from transport attempts. A retry following an ambiguous timeout must not be silently counted as an additional independent k trial or used to assert that the original attempt produced no output. Report timeout/retry coverage and inspect server completion/cancellation records before treating such runs as unqualified baseline measurements.
+
+The latest targeted suite passes 20 offline tests, including timeout details retained after successful retry and the underlying exception class of urllib connection failures. No remote calls, server log reads or GPU inference were performed by the assistant.
+
+## Follow-up: streaming observation of long generation
+
+The user copied the full server log and profiling journals to local `runs/server-diagnostics-20261021-213158`. Aligning phase starts/ends reveals an approximately four-hour offset between the server log's clock labels and client UTC timestamps; this is an observed offset, not an assumed named timezone. All eight failed-attempt windows contain continuous generation, no sampled waiting requests, and rising KV usage. The sampled engine queue never exceeds zero and KV usage peaks at 22.3% of the allocated cache. Example: the serial embodied request from client UTC 09:50:16 through 10:00:16 has 60 engine samples with generation 52.4–79.9 tokens/s and KV growth from 0.1% to 13.2%. This supports long active generation, not a stalled engine, as the reason the non-streaming client waits until its response timeout. Repetition itself is not proven because failed text was not captured.
+
+Prepare `scripts/probe_vllm_stream.py` and offline tests. Reuse the existing owned service and original input; add only transport controls `stream=true` and `stream_options` for usage reporting. Preserve all generation defaults. Write raw SSE events and partial text per HTTP attempt, print real usage progress, retain the initial-plus-five network retry rule and no guardrail retries. Use a socket inactivity timeout, no automatic total-duration or repetition stop. Manual interruption must retain partial output and remain an incomplete diagnostic; no benchmark labels are produced. This probe precedes integrating streaming into the complete benchmark runner.
+
+Official pinned vLLM 0.11.0 sources: [stream/usage options](https://github.com/vllm-project/vllm/blob/v0.11.0/vllm/entrypoints/openai/protocol.py#L177), [streaming usage and final events](https://github.com/vllm-project/vllm/blob/v0.11.0/vllm/entrypoints/openai/serving_chat.py#L518), [non-streaming waits for final output](https://github.com/vllm-project/vllm/blob/v0.11.0/vllm/entrypoints/openai/serving_chat.py#L1072).
+
+The isolated streaming probe and seven synthetic-SSE tests are implemented; the focused suite now passes 27 offline tests, including a CLI exercise against the prepared-data file contract. It saves each attempt separately, retains partial output after a subsequent successful retry, captures a manually interrupted response as incomplete, and has no overall time or output-length limit. It is not yet the transport of the eight-benchmark production runner. Existing real measurement files are preserved; a derived `analysis-long-generation.json` in the user-copied diagnostic folder records source-log SHA256 and the eight aligned evidence windows.
+
+The original startup log explicitly shows inherited model defaults temperature=0.7, top_k=20, top_p=0.8. The client still omits those parameters. This helps explain why a retry can produce a shorter response, but does not prove a particular failed response was repetitive. The probe observes the original configured sampling rather than introducing an early-stop or deterministic decoding policy.
