@@ -1,4 +1,4 @@
-"""OAI-compatible HTTP with no SDK hidden retries and no generation parameters."""
+"""OAI-compatible HTTP with explicit retries and an optional target output cap."""
 
 import http.client
 import json
@@ -57,12 +57,16 @@ class Client:
         if endpoint["api_key_env"] and not self.key:
             raise ValueError(f"Missing {endpoint['api_key_env']} in current process environment")
 
-    def complete(self, *, messages=None, prompt=None, attempt_offset=0, on_attempt=None, stream=False, stream_directory=None, cancel_event=None):
+    def complete(self, *, messages=None, prompt=None, attempt_offset=0, on_attempt=None, stream=False, stream_directory=None, cancel_event=None, max_tokens=None):
         if (messages is None) == (prompt is None):
             raise ValueError("Provide exactly messages or prompt")
         if type(attempt_offset) is not int or attempt_offset not in range(7):
             raise ValueError("Invalid transport attempt budget")
         payload = {"model": self.endpoint["model"], **({"messages": messages} if messages is not None else {"prompt": prompt})}
+        if max_tokens is not None:
+            if type(max_tokens) is not int or max_tokens < 1:
+                raise ValueError("max_tokens must be null or a positive integer")
+            payload["max_tokens"] = max_tokens
         if type(stream) is not bool or (stream_directory is not None and not stream):
             raise ValueError("Invalid stream transport configuration")
         if stream:

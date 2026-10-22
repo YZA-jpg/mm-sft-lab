@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .common import (append, code_identity, digest, file_hash, latest, lock, now, read_json,
                      read_journal, write_json, write_jsonl)
+from .config import generation_parameters
 from .data import load_dataset
 from .grading import grade_result
 from .prompts import judge_request, target_request
@@ -169,7 +170,7 @@ def stage(run_dir, name, *, client_factory=Client, retry_recoverable=False):
                     _, request = judge_request(job["record"], job["prediction"]["text"], root, data)
                     row["input_response_sha256"] = job["prediction"]["response_sha256"]
                 row["preparation_seconds"] = time.perf_counter() - started
-                transport = {}
+                transport = generation_parameters(config) if name == "generation" else {}
                 if name == "generation" and config["execution"]["generation_stream"]:
                     stream_directory = directory / "streams" / digest(job["job_id"])
                     stream_directory.mkdir(parents=True, exist_ok=True)
@@ -226,5 +227,10 @@ def stage(run_dir, name, *, client_factory=Client, retry_recoverable=False):
                   "processing_complete": len(jobs) == len(previous),
                   "scoring_complete": len(jobs) == len(previous) and all(r["status"] == "ok" for r in previous.values()),
                   "last_session": session}
+        if name == "generation":
+            result.update(parameters=generation_parameters(config),
+                          finish_reasons=dict(Counter(r.get("finish_reason") for r in previous.values())),
+                          truncated_jobs=sum(r["status"] == "ok" and r.get("finish_reason") == "length"
+                                             for r in previous.values()))
         write_json(directory / "manifest.json", result)
     return result

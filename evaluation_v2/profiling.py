@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from .common import atomic_text, digest, lock, now, write_json
+from .config import generation_parameters
 from .data import load_dataset
 from .metrics import export_report
 from .runner import initialize, stage
@@ -45,10 +46,10 @@ def sweep(data_root, output, config, model_path, *, levels=(1, 4, 8, 16), rounds
         schedule.extend((repeat, level) for level in order)
     write_json(output / "plan.json", {"mode": "generation_only_no_cloud_judging", "created_at": now(),
         "selection_sha256": selected_sha, "selected_samples": len(rows), "schedule": schedule,
-        "model_identity": identity, "http_generation_parameters": [],
+        "model_identity": identity, "http_generation_parameters": generation_parameters(config),
         "notes": ["One server startup shared by all measured rounds.", "A separate warmup run is excluded from measured results.",
                   "vLLM prefix/image caches may persist between levels; this measures warm steady-state behavior, not cold per-request performance.",
-                  "Stochastic outputs can differ in length because decoding parameters and seed are omitted.",
+                  "Only the configured target output budget is sent; sampling controls and seed remain omitted, so responses can differ in length.",
                   "Do not infer linear multi-GPU scaling from this single-GPU sweep."]})
     summary, started = [], time.perf_counter()
     with lock(output, "sweep"), Monitor(output, gpu), serve(vllm_python, model_path, "target", port, gpu,

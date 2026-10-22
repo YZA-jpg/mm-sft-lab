@@ -97,6 +97,7 @@ def serve(python, model, name, port, gpu, output, *, adapter=None, memory=None, 
                HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     started = time.perf_counter()
     stream = (output / "server.log").open("a", encoding="utf-8")
+    print(f"Starting vLLM {name} on GPU {gpu}, port {port}; log: {output / 'server.log'}", flush=True)
     process = subprocess.Popen(args, stdout=stream, stderr=subprocess.STDOUT, env=env, start_new_session=True)
     write_json(output / "owner.json", {"pid": process.pid, "owned_process_group": process.pid, "created_at": now()})
     try:
@@ -115,6 +116,7 @@ def serve(python, model, name, port, gpu, output, *, adapter=None, memory=None, 
                     raise ValueError("Advertised LoRA root differs from requested adapter")
                 receipt.update(ready_at=now(), startup_seconds=time.perf_counter() - started, advertised_models=models)
                 write_json(output / "launch.json", receipt)
+                print(f"vLLM {expected} ready after {receipt['startup_seconds']:.1f}s", flush=True)
                 break
             except (urllib.error.URLError, ConnectionError, TimeoutError):
                 time.sleep(1)

@@ -51,7 +51,12 @@ class FakeHTTP:
     def __call__(self, request, **kwargs):
         body = json.loads(request.data)
         self.calls.append({"url": request.full_url, "body": body})
-        if set(body) not in ({"model", "messages"}, {"model", "prompt"}):
+        expected = {"model", "prompt" if "prompt" in body else "messages"}
+        if body["model"] == "target" and "max_tokens" in body:
+            if type(body["max_tokens"]) is not int or body["max_tokens"] < 1:
+                raise AssertionError("Invalid target output budget")
+            expected.add("max_tokens")
+        if set(body) != expected:
             raise AssertionError("Unexpected generation parameters")
         if body["model"] == "target":
             text = "4" if "Synthetic mathvista" in json.dumps(body) else "A"

@@ -6,6 +6,7 @@ from pathlib import Path
 from statistics import mean
 
 from .common import atomic_text, digest, read_json, read_journal, write_json
+from .config import generation_parameters
 
 MAIN_COLUMNS = [
     ("SIUO ASR@3", "siuo/ASR@3"), ("MSS Safe Acc", "mssbench/pooled/safe_acc"),
@@ -71,6 +72,7 @@ def comparison_identity(report):
             "data_manifest_sha256": report["data_manifest_sha256"], "selection_sha256": report["selection_sha256"],
             "code_sha256": report["code_sha256"], "judges": report["judges"],
             "repeats": config["repeats"], "mmvet_judge_repeats": config["mmvet_judge_repeats"],
+            "target_generation_parameters": generation_parameters(config),
             "execution_policy": {k: v for k, v in config["execution"].items() if "concurrency" not in k},
             "target_generation_config_sha256": model.get("config_sha256", {}).get("generation_config.json"),
             "serving_runtime": model.get("serving_runtime"), "wildguard_identity": model.get("wildguard_identity")}

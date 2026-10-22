@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "protocol_id": "evaluation_v2_draft_20261022_64k",
+  "protocol_status": "provisional",
+  "benchmarks": ["siuo", "mssbench", "figstep", "holisafe", "wildjailbreak", "mmstar", "mathvista", "mmvet"],
+  "generation": {"max_tokens": 65536},
+  "target": {"base_url": "http://127.0.0.1:18004/v1"},
+  "wildguard": {"base_url": "http://127.0.0.1:18001/v1"},
+  "execution": {
+    "generation_concurrency": 4,
+    "generation_stream": true,
+    "timeout_seconds": 600,
+    "per_benchmark_limit": null
+  }
+}

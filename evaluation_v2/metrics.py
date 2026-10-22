@@ -8,6 +8,7 @@ from pathlib import Path
 from statistics import mean
 
 from .common import atomic_text, digest, file_hash, latest, now, read_journal, write_json
+from .config import generation_parameters
 from .grading import mathvista_normalize, parse_choice, parse_grade
 from .runner import generation_jobs, load_run
 from .reporting import resources, wide_table
@@ -56,7 +57,7 @@ def timing_summary(rows):
             "latency_p50_seconds": percentile(latencies, .5), "latency_p95_seconds": percentile(latencies, .95),
             "completion_tokens": tokens, "requests_per_second": len(successful) / span if span else None,
             "output_tokens_per_second": tokens / span if span else None,
-            "ttft_seconds": None, "note": "Non-streaming client wall time; not vLLM queue time/TTFT. Bench spans overlap and must not be added."}
+            "ttft_seconds": None, "note": "Client job wall time includes preprocessing, retries and backoff; streamed TTFT is stored per HTTP attempt. Bench spans overlap and must not be added."}
 
 
 def summarize(run_dir):
@@ -205,16 +206,25 @@ def summarize(run_dir):
         groups = [[p for p in by_sample.get(row["id"], []) if p["status"] == "ok"] for row in records if row["benchmark"] == benchmark]
         k = config["repeats"][benchmark]
         complete_groups = [group for group in groups if len(group) == k]
+        valid = [r for r in predictions if r["status"] == "ok"]
+        truncated = sum(r.get("finish_reason") == "length" for r in valid)
         generation_details[benchmark] = {"finish_reasons": dict(Counter(r.get("finish_reason") for r in predictions)),
+            "truncated": truncated,
+            "truncation": ratio(truncated, len(valid), sum(r["benchmark"] == benchmark for r in jobs),
+                                label="length-limited / valid generated responses"),
             "empty_successful_responses": sum(r["status"] == "ok" and not r["text"].strip() for r in predictions),
             "complete_generation_groups": len(complete_groups),
             "all_trials_identical_groups": sum(len({p["response_sha256"] for p in group}) == 1 for group in complete_groups) if k > 1 else None,
             "repeat_count": k, "note": "Identical repeated responses are retained; no hidden sampling overrides."}
+    valid_generation = [r for r in phases["generation"].values() if r["status"] == "ok"]
+    truncated_generation = sum(r.get("finish_reason") == "length" for r in valid_generation)
     return {"schema_version": 2, "created_at": now(), "run_fingerprint": fingerprint, "is_mock": manifest["is_mock"],
             "protocol_status": config["protocol_status"], "model_label": manifest["model_label"],
             "protocol_id": config["protocol_id"], "complete": all(r["complete"] for r in metrics.values()),
-            "generation": {"expected": expected_total, "successful": sum(r["status"] == "ok" for r in phases["generation"].values()),
-                           "truncated": sum(r.get("finish_reason") == "length" for r in phases["generation"].values()),
+            "generation": {"expected": expected_total, "successful": len(valid_generation),
+                           "parameters": generation_parameters(config), "truncated": truncated_generation,
+                           "truncation": ratio(truncated_generation, len(valid_generation), expected_total,
+                                               label="length-limited / valid generated responses"),
                            "by_benchmark": generation_details},
             "metrics": metrics, "quality": quality, "error_counts": dict(errors), "timing": phase_times,
             "resources": resources(run_dir),
@@ -223,7 +233,8 @@ def summarize(run_dir):
             "selection_sha256": manifest["signature"]["selection_sha256"],
             "code_sha256": manifest["signature"]["code_sha256"],
             "config": config, "model_identity": manifest["signature"]["model_identity"],
-            "generation_parameters_sent": [], "notes": ["No old B0 scores reused.", "Provider guards, judge refusals and format errors excluded from metric y; full expected count is retained.",
+            "generation_parameters_sent": list(generation_parameters(config)), "notes": ["No old B0 scores reused.", "Provider guards, judge refusals and format errors excluded from metric y; full expected count is retained.",
+                 "Target length-limited answers are retained and reported separately; reaching the output budget does not trigger a retry.",
                  "MMStar local extraction failure is a model error counted wrong, not an excluded judge error.",
                  "HoliSafe SSS is RR; other types are ASR. All are lower-is-better.",
                  "MMVet x is a score sum, not an integer count."]}

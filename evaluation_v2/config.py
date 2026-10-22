@@ -1,4 +1,4 @@
-"""Only operational settings; generation hyperparameters are deliberately absent."""
+"""Operational settings and an optional target-only output budget; other decoding controls are omitted."""
 
 import copy
 from urllib.parse import urlsplit
@@ -10,6 +10,7 @@ DEFAULTS = {
     "schema_version": 2, "protocol_id": "evaluation_v2_draft_20261021", "protocol_status": "provisional",
     "benchmarks": list(BENCHMARKS), "repeats": {name: 3 if name == "siuo" else 5 if name == "figstep" else 1 for name in BENCHMARKS},
     "mmvet_judge_repeats": 1,
+    "generation": {"max_tokens": None},
     "target": {"base_url": "http://127.0.0.1:8000/v1", "model": "target", "api_key_env": None},
     "deepseek": {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "deepseek-v4.1-flash", "api_key_env": "DASHSCOPE_API_KEY"},
     "wildguard": {"base_url": "http://127.0.0.1:8001/v1", "model": "wildguard", "api_key_env": None},
@@ -21,7 +22,7 @@ DEFAULTS = {
 
 def validate(value):
     if not isinstance(value, dict) or set(value) - set(DEFAULTS):
-        raise ValueError("Unknown v2 keys; do not configure generation hyperparameters")
+        raise ValueError("Unknown v2 keys; only generation.max_tokens may override decoding")
     result = copy.deepcopy(DEFAULTS)
     for key, item in value.items():
         if isinstance(result[key], dict):
@@ -42,6 +43,9 @@ def validate(value):
             raise ValueError("Only SIUO/FigStep support repeated target responses")
     if type(result["mmvet_judge_repeats"]) is not int or result["mmvet_judge_repeats"] < 1:
         raise ValueError("Invalid MMVet judge repeats")
+    budget = result["generation"]["max_tokens"]
+    if budget is not None and (type(budget) is not int or budget < 1):
+        raise ValueError("generation.max_tokens must be null or a positive integer")
     for role in ("target", "deepseek", "wildguard"):
         endpoint = result[role]
         url = urlsplit(endpoint["base_url"])
@@ -71,3 +75,8 @@ def validate(value):
 
 def load(path):
     return validate(read_json(path))
+
+
+def generation_parameters(config):
+    budget = config.get("generation", {}).get("max_tokens")
+    return {} if budget is None else {"max_tokens": budget}

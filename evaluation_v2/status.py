@@ -5,6 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 from .common import latest, now, read_json
+from .config import generation_parameters
 
 
 def snapshot(path):
@@ -41,6 +42,9 @@ def status(run_dir):
             "status_counts": dict(Counter(r.get("error_kind") or "valid" for r in rows.values())),
             "by_benchmark": dict(Counter(r["benchmark"] for r in rows.values())), "lock_owner": owner,
             "latest_job": recent.get("job_id"), "latest_finished_epoch": recent.get("job_finished_epoch")}
+        if phase == "generation":
+            phases[phase].update(finish_reasons=dict(Counter(r.get("finish_reason") for r in rows.values())),
+                truncated=sum(r["status"] == "ok" and r.get("finish_reason") == "length" for r in rows.values()))
     streams = []
     for path in (root / "generation/streams").glob("*/attempt-*/progress.json"):
         if (path.parent / "summary.json").exists():
@@ -53,7 +57,7 @@ def status(run_dir):
         if identity.get("run_fingerprint") == manifest["run_fingerprint"]:
             streams.append({"job_id": identity["job_id"], "attempt": path.parent.name, **progress})
     return {"at": now(), "run_dir": str(root), "run_fingerprint": manifest["run_fingerprint"],
-            "is_mock": manifest["is_mock"], "phases": phases,
+            "is_mock": manifest["is_mock"], "target_generation_parameters": generation_parameters(config), "phases": phases,
             "incomplete_streams": sorted(streams, key=lambda row: row.get("updated_at", ""))[-16:],
             "stream_progress_scope": "Last saved progress of streams without a terminal capture summary; presence alone does not prove their processes are alive.",
             "scope": "Read-only live snapshot, not a signed final score. Remaining judge jobs include generation failures that cannot yet be judged. Lock presence is not proof that its owner is alive."}

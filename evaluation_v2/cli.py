@@ -22,7 +22,7 @@ from .serving import checkpoint_identity, run_all, runtime_info, server_command
 
 
 def parser():
-    root = argparse.ArgumentParser(description="Independent v2 evaluation; all HTTP decoding hyperparameters omitted")
+    root = argparse.ArgumentParser(description="Independent v2 evaluation; optional target output cap, other decoding controls omitted")
     commands = root.add_subparsers(dest="command", required=True)
     for command in ("plan", "init", "run"):
         sub = commands.add_parser(command)
@@ -112,7 +112,10 @@ def main(argv=None):
                   "generation_jobs": dict(counts), "total_generation_jobs": len(jobs),
                   "deepseek_jobs": sum(n * (config["mmvet_judge_repeats"] if name == "mmvet" else 1)
                                        for name, n in counts.items() if name not in ("wildjailbreak", "mmstar")),
-                  "wildguard_jobs": counts["wildjailbreak"], "http_decoding_parameters": [],
+                  "wildguard_jobs": counts["wildjailbreak"],
+                  "http_decoding_parameters": list(configuration.generation_parameters(config)),
+                  "target_generation_parameters": configuration.generation_parameters(config),
+                  "judge_generation_parameters": {"deepseek": {}, "wildguard": {}},
                   "network_retries": 5, "max_total_transport_attempts_per_job": 6,
                   "concurrency": config["execution"], "asr_group_rule": "all k valid; any unsafe",
                   "managed_gpu_schedule": "target generation first; stop target; run WildGuard and cloud DeepSeek concurrently"}
