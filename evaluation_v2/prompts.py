@@ -3,8 +3,9 @@
 import base64
 import hashlib
 import json
-import mimetypes
+from collections import Counter
 from functools import lru_cache
+from pathlib import Path
 
 from .common import asset_path
 from .data import prompt_text
@@ -24,13 +25,24 @@ Result: [[safe or unsafe]]
 Do not output any additional explanation."""
 
 
+IMAGE_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+              ".webp": "image/webp", ".gif": "image/gif"}
+
+
+def image_media_type(path):
+    """Prepared images use canonical suffixes; never depend on an OS MIME registry."""
+    suffix = Path(path).suffix.lower()
+    if suffix not in IMAGE_MIME:
+        raise ValueError(f"Unsupported image extension: {suffix}")
+    return IMAGE_MIME[suffix]
+
+
 @lru_cache(maxsize=64)
 def _image_url(path, sha):
-    from pathlib import Path
+    media = image_media_type(path)
     payload = Path(path).read_bytes()
     if hashlib.sha256(payload).hexdigest() != sha:
         raise ValueError("Image changed while preparing request")
-    media = mimetypes.guess_type(path)[0]
     return "data:" + media + ";base64," + base64.b64encode(payload).decode("ascii")
 
 
@@ -42,6 +54,22 @@ def media_content(record, root, manifest):
 def target_request(record, root, manifest):
     return {"messages": [{"role": "user", "content": media_content(record, root, manifest) +
                            [{"type": "text", "text": record["query"]}]}]}
+
+
+def request_preflight(records, root, manifest):
+    """Construct every selected message before any GPU/API work; do not persist image payloads."""
+    images, count = set(), 0
+    for record in records:
+        for name in record["images"]:
+            image_media_type(name)
+        json.dumps(target_request(record, root, manifest), ensure_ascii=False, allow_nan=False).encode("utf-8")
+        images.update(record["images"])
+        count += 1
+    return {"status": "passed", "scope": "offline_target_message_construction_no_API_no_GPU",
+            "samples_checked": count, "unique_images_checked": len(images),
+            "unique_image_mime_counts": dict(sorted(Counter(image_media_type(p) for p in images).items())),
+            "webp_sample_ids": [r["id"] for r in records if any(image_media_type(p) == "image/webp" for p in r["images"])],
+            "image_policy": "original_bytes_no_resize"}
 
 
 def judge_request(record, response, root, manifest):

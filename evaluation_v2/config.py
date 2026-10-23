@@ -16,7 +16,8 @@ DEFAULTS = {
     "wildguard": {"base_url": "http://127.0.0.1:8001/v1", "model": "wildguard", "api_key_env": None},
     "execution": {"generation_concurrency": 4, "generation_stream": False, "deepseek_concurrency": 4, "wildguard_concurrency": 8,
                   "timeout_seconds": 180, "network_retries": 5, "backoff_initial_seconds": 1.0,
-                  "backoff_max_seconds": 30.0, "per_benchmark_limit": None},
+                  "backoff_max_seconds": 30.0, "per_benchmark_limit": None,
+                  "benchmark_schedule": "mixed", "sample_ids": None},
 }
 
 
@@ -70,6 +71,14 @@ def validate(value):
     limit = execution["per_benchmark_limit"]
     if limit is not None and (type(limit) is not int or limit < 1):
         raise ValueError("Invalid benchmark limit")
+    if execution["benchmark_schedule"] not in ("mixed", "serial"):
+        raise ValueError("benchmark_schedule must be mixed or serial")
+    ids = execution["sample_ids"]
+    if ids is not None:
+        if not isinstance(ids, list) or not ids or any(not isinstance(n, str) or not n for n in ids):
+            raise ValueError("sample_ids must be null or a nonempty list of sample IDs")
+        if len(set(ids)) != len(ids) or limit is not None:
+            raise ValueError("sample_ids must be unique and cannot be combined with per_benchmark_limit")
     return result
 
 

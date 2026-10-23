@@ -28,3 +28,9 @@ Use the managed CLI through `scripts/run_eval_v2.sh` with `--generate-only`, `--
 - All baseline/SFT models in this protocol must use the same cap; old unlimited outputs are not imported into the new run. Other protocol choices remain provisional.
 - Earlier service logs report a 291,264-token KV pool. Four full output budgets total 262,144 tokens before inputs; this motivates concurrency four, not a guarantee of available memory or absence of scheduler preemption on a shared GPU. Inspect fresh GPU availability before startup.
 - This change bounds a repeated answer; it does not fix the model's observed repetition or establish a runtime promise. A 65,536-token answer can still be expensive.
+
+## Full SIUO/MSSBench launch preparation
+
+The user authorized preparing the full run after the GPU 1 smoke. Rechecked the existing real local snapshot: 167 SIUO samples with trials 0/1/2 (501 jobs), 1200 chat and 760 embodied MSSBench samples with trial 0 (1960 jobs), 2461 unique job IDs total. Safe/unsafe each have 980 MSSBench requests. All 60 focused v2 offline tests pass again. Existing code/config already provide the required repeats, durable results/attempts, exclusion quality metrics and per-benchmark timing; no behavior change is needed.
+
+The user-run server instructions are in ../siuo-mss-64k-full-run.md. They verify the server's 21/21 smoke report and full plan, check current GPU 1 memory, save plan/commit/PID/pointer, and submit the entire generation-only managed lifecycle to nohup in a new full directory. The earlier GPU 4 startup failed for insufficient memory; the fresh GPU 1 check is not a reservation or guarantee. Judges follow later in the same run, one logical judgment per valid generated response; network retries never add ASR trials. Other six benchmarks are outside this launch. No remote execution or final full score is claimed.

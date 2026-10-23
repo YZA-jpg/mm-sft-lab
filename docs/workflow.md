@@ -1,42 +1,28 @@
 # 本地修改与服务器测试流程
 
-新增 Step 1 数据与训练入口的阶段命令见 [服务器执行手册](server-runbook.md)。当前训练入口覆盖 TextVQA、HH harmless chosen、VLGuard，评测加入 WildJailbreak eval 和 TextVQA；VLGuard 使用独立训练子根，保留现有父评测快照。数据处理和实验约定另见 [独立记录](data-and-experiment-notes.md)。新代码先完成本地离线验收，再由用户同步服务器。数据下载、环境检测、token 审计、训练 smoke、完整 baseline 与正式训练各自独立执行反馈。
+当前阶段：先完成 baseline，暂缓 LoRA 调整。执行命令统一见 [baseline 手册](baseline-runbook.md)，其他资料按 [文档索引](README.md) 查阅。
 
-## 工作约定
+## 操作边界
 
-- 本地项目目录：`D:\Desktop\AI Safety\mm-sft-lab`，直接在该目录工作。
-- 远程仓库：`git@github.com:YZA-jpg/mm-sft-lab.git`。
-- 采用 main 分支进行初期同步；首次提交 `81b1a09` 已推送到 origin/main。
-- 助手修改本地项目文件，并说明本次改动、检查结果和下一步操作。
-- Git 提交、推送、服务器拉取、数据下载和服务器测试，由用户执行给出的命令。
-- 每轮命令明确标注本地 PowerShell 或服务器 Bash，提供预期结果；依赖前一步结果的操作等用户反馈后继续。
-- 每轮围绕一个阶段组织命令，阶段内可连续执行；环境检测、环境安装、smoke、判分和全量运行分别结束反馈，避免自动串联跨阶段。
-- 命令包含失败停止检查，报错时保留完整输出后排查。
+- 本地目录：`D:\Desktop\AI Safety\mm-sft-lab`；远程：`git@github.com:YZA-jpg/mm-sft-lab.git`。
+- 服务器：SSH 别名 `tstar_001`，仓库 `/data1/yaoziao/mm-sft-lab`。
+- 助手修改本地代码、文档并进行离线测试；用户执行 Git、SSH/SCP、安装、真实模型与 API 测试。
+- 本地命令标注 Windows PowerShell，服务器命令标注 Bash，不在服务器粘贴 PowerShell。
+- 环境检查、修复 smoke、全量生成、judge 分阶段执行；每阶段反馈后再进入下一阶段。smoke 不自动启动全量。
+- 生成过程在后台独立会话运行，保存 PID、日志和目录指针，关闭 SSH 终端不应终止任务。启动回执只说明进程已创建，模型就绪和最终成功仍需看日志、状态。
 
-## 实验环境
+## 当前协议
 
-- 第一阶段使用一张 NVIDIA A100-SXM4-80GB；用户提供的物理 GPU 编号为 7。
-- 模型路径：`/data1/sharehub/models/Qwen3-VL-4B-Instruct`。
-- 服务器仓库路径：`/data1/yaoziao/mm-sft-lab`；已校验的离线数据目录为其下的 `data/imported/`。
-- 服务器 Git 2.34.1，base Python 3.14.7，Conda 26.7.1，驱动 580.159.03；数据环境 `.venv-data` 已通过 83 项离线测试。
-- 默认 Conda 频道遇到 ToS 检查，创建项目环境时使用 `--override-channels --channel conda-forge`。
-- `ipiguard-py310` 曾出现 CUDA 动态库导入错误；独立 `.venv` 已跑通真实推理，使用 Python 3.11、torch 2.8.0+cu128、torchvision 0.23.0、Transformers 4.57.1。
-- 下一阶段先做本地规则统计，再确定人工、本地模型或 API 判分方式；见 [采样 baseline 记录](sampling-baseline.md)。
+SIUO 每题 3 次、MSSBench 每条 1 次；目标输出上限 65536，其余参数默认。单卡 vLLM，SIUO 完成后再开始 MSSBench，每个数据集内并发 4。MSSBench 两个子模块仍可交错，其子模块时间不当作独立数据集墙钟时间。
 
-## 推进顺序
+模型启动/关闭是共享开销，逐数据集生成、judge 时间分别记录。请求延迟总和不等于并发运行耗时；旧混合运行的 benchmark 时间区间不相加。重启空档、失败尝试和未完成会话单列。
 
-1. 完成本地 Git 初始化、首次提交与推送。
-2. 本地增加数据下载、规范化和完整性校验脚本。
-3. 用户推送该批修改，在服务器克隆或拉取同一提交。
-4. 本地下载与校验 SIUO、MSSBench，通过 SCP 上传离线包，在服务器解压复核。
-5. 本地增加模型推理与评测入口，服务器依次执行 12 条 smoke、同清单 batch 1/4 对照、48 条小批量测试。
-6. 小样本稳定后检查评分链路，冻结协议，再分别启动全量生成和判分，保留回答、评分和运行配置。
+网络请求首次失败后最多重试 5 次；护栏不重试。格式错误、鉴权、输入限制与网络错误分别记录；当前实现不会自动重试所有非护栏错误。因长度上限终止的原回答保留，不增加采样次数。所有指标保留 x/y、expected 和覆盖率。
 
-## 数据与产物
+## 同步与保留
 
-- 大体积数据、官方 benchmark 工作副本、模型权重、checkpoint、运行产物和本地密钥不提交 Git。
-- 数据下载到服务器指定目录，仓库保存下载代码、来源、revision 和校验信息。
-- 服务器代码更新使用 `git pull --ff-only`；若出现本地修改或分支分叉，先检查原因。
-- 每次服务器测试记录 `git rev-parse HEAD`，用于对应本地代码版本。
-
-当前进度：框架提交 `fb33633` 已同步服务器，83 项离线测试通过；真实 GPU smoke、长度对照与 batch 输入对齐检查完成。48 条采样试跑全部生成成功，16 个配对完整，3 条 embodied 截断，重合的 12 条回答完全复现。全量数据仍为 2,294 条请求、980 个 MSSBench 配对、919 个图片文件。真实 judge、全量评测与 SFT 尚未完成。
+- 更新前保留本地未提交修改，按本次文件清单提交；服务器使用 `git pull --ff-only`，冲突时先检查。
+- 当前代码修复和调度改变会产生新代码指纹，必须新建运行目录；旧冻结运行需要原版本代码才能恢复。
+- 旧 HF、无上限、64k 部分运行及异常记录保留，不改写其回答、manifest 或得分。
+- 大数据通过已校验离线包传输；数据、模型、checkpoint、运行产物和 API Key 不提交 Git。模型环境、空闲 GPU 状态以当次服务器检测为准，不沿用历史空闲显存。
+- 本轮不新增训练数据重叠检查。训练准备及既有过滤依据仍保留在 Step 1 文档中。

@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "protocol_id": "evaluation_v2_20261023_siuo_mss_64k_serial",
+  "protocol_status": "provisional",
+  "benchmarks": ["siuo", "mssbench"],
+  "generation": {"max_tokens": 65536},
+  "target": {"base_url": "http://127.0.0.1:18014/v1"},
+  "execution": {
+    "generation_concurrency": 4,
+    "generation_stream": true,
+    "timeout_seconds": 600,
+    "benchmark_schedule": "serial"
+  }
+}

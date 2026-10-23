@@ -1,5 +1,7 @@
 # Smoke 与小批量推理验收
 
+> 文档状态（2026-10-23）：历史 HF smoke / batch 对照。当前 WebP 修复验证请使用 [baseline 手册](baseline-runbook.md)。
+
 2026-10-15 更新：本页保留初始 greedy 检查流程。真实推理与 48 条采样试跑已完成，最新配置、结果和下一阶段见 [采样 baseline](sampling-baseline.md)。下面的环境问题属于首次准备时的记录。
 
 此流程用于确认 Qwen3-VL 的图片、文本、padding 与回答对应正确，再进入全量 baseline。代码在本地编写；Git 同步和服务器操作由用户执行。当前尚未启动真实模型，也未调用 judge API。

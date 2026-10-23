@@ -8,4 +8,6 @@
 
 依据：[Transformers 4.57.1 加载逻辑](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/image_processing_base.py)、[Qwen fast 图像预处理](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/qwen2_vl/image_processing_qwen2_vl_fast.py)。
 
-本地结果：新增回归在修复前复现同一个 ValueError；修复后 7 项 processor 回归和全套 159 项离线测试通过，`git diff --check` 通过。真实服务器 processor 和 token 预审尚待用户同步后验证。
+本地结果：新增回归在修复前复现同一个 ValueError；修复后 7 项 processor 回归和全套 159 项离线测试通过，`git diff --check` 通过。
+
+服务器结果：用户同步后真实 Qwen2VLImageProcessorFast 的两张探针通过，实际面积分别为 65,536 / 1,048,576，视觉 token 分别为 64 / 1,024。三组各 64 条完整编码预审及后续训练尚待执行。

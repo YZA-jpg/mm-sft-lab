@@ -132,6 +132,16 @@ def load_dataset(root, config, *, verify_images=True):
         if file_hash(asset_path(root, info["path"])) != info["sha256"]:
             raise ValueError("Prepared judge prompt changed")
     all_rows = read_journal(root / "records.jsonl")
+    requested = config["execution"].get("sample_ids")
+    def selection_unit(row):
+        pair = row["reference"].get("pair_id") if row["benchmark"] == "mssbench" else None
+        return (row["benchmark"], row["split"], pair or row["id"])
+    requested_units = None
+    if requested is not None:
+        eligible = {r["id"]: r for r in all_rows if r["benchmark"] in config["benchmarks"]}
+        if set(requested) - set(eligible):
+            raise ValueError(f"Unknown or unselected sample IDs: {sorted(set(requested) - set(eligible))}")
+        requested_units = {selection_unit(eligible[name]) for name in requested}
     seen, rows, counts, selected_groups = set(), [], Counter(), set()
     limit = config["execution"]["per_benchmark_limit"]
     for row in all_rows:
@@ -140,9 +150,10 @@ def load_dataset(root, config, *, verify_images=True):
             raise ValueError("Duplicate prepared ID")
         seen.add(row["id"])
         group = (row["benchmark"], row["split"])
-        pair = row["reference"].get("pair_id") if row["benchmark"] == "mssbench" else None
-        unit = (*group, pair or row["id"])
-        if row["benchmark"] in config["benchmarks"] and (limit is None or unit in selected_groups or counts[group] < limit):
+        unit = selection_unit(row)
+        if (row["benchmark"] in config["benchmarks"] and
+                (requested_units is None or unit in requested_units) and
+                (limit is None or unit in selected_groups or counts[group] < limit)):
             rows.append(row)
             if unit not in selected_groups:
                 counts[group] += 1

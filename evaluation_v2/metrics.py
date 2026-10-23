@@ -57,7 +57,7 @@ def timing_summary(rows):
             "latency_p50_seconds": percentile(latencies, .5), "latency_p95_seconds": percentile(latencies, .95),
             "completion_tokens": tokens, "requests_per_second": len(successful) / span if span else None,
             "output_tokens_per_second": tokens / span if span else None,
-            "ttft_seconds": None, "note": "Client job wall time includes preprocessing, retries and backoff; streamed TTFT is stored per HTTP attempt. Bench spans overlap and must not be added."}
+            "ttft_seconds": None, "note": "Client job wall time includes preprocessing, retries and backoff; streamed TTFT is stored per HTTP attempt. Mixed-schedule benchmark spans overlap; serial benchmark boundary wall is recorded separately."}
 
 
 def summarize(run_dir):

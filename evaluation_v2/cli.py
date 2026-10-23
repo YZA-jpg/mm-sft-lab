@@ -14,6 +14,7 @@ from pathlib import Path
 from . import config as configuration
 from .common import read_json
 from .data import load_dataset
+from .prompts import request_preflight
 from .metrics import export_report
 from .reporting import compare
 from .status import status
@@ -105,10 +106,12 @@ def main(argv=None):
         config["target"]["model"] = "target_adapter"
     if args.command == "plan":
         rows, data = load_dataset(args.data_root, config)
+        checked = request_preflight(rows, args.data_root, data)
         jobs = generation_jobs(rows, config)
         counts = Counter(job["benchmark"] for job in jobs)
         result = {"mode": "plan_no_API_no_GPU", "protocol_id": config["protocol_id"], "protocol_status": config["protocol_status"],
                   "is_mock": data["is_mock"], "sample_counts": dict(Counter(r["benchmark"] for r in rows)),
+                  "request_preflight": checked,
                   "generation_jobs": dict(counts), "total_generation_jobs": len(jobs),
                   "deepseek_jobs": sum(n * (config["mmvet_judge_repeats"] if name == "mmvet" else 1)
                                        for name, n in counts.items() if name not in ("wildjailbreak", "mmstar")),
@@ -118,6 +121,8 @@ def main(argv=None):
                   "judge_generation_parameters": {"deepseek": {}, "wildguard": {}},
                   "network_retries": 5, "max_total_transport_attempts_per_job": 6,
                   "concurrency": config["execution"], "asr_group_rule": "all k valid; any unsafe",
+                  "benchmark_schedule": config["execution"]["benchmark_schedule"],
+                  "benchmark_order": config["benchmarks"],
                   "managed_gpu_schedule": "target generation first; stop target; run WildGuard and cloud DeepSeek concurrently"}
         if args.model_path:
             port = int(config["target"]["base_url"].split(":")[-1].split("/")[0])

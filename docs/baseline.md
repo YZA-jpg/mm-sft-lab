@@ -1,5 +1,7 @@
 # Baseline 框架与服务器启动流程
 
+> 文档状态（2026-10-23）：历史 HF baseline 指令，供追溯。当前运行请使用 [baseline 手册](baseline-runbook.md)。
+
 当前框架已在服务器通过 83 项离线测试，完成真实 Qwen 模型加载、GPU smoke 与 48 条采样试跑。真实 judge 和全量评测待完成；最新参数、实验记录与下一阶段见 [采样 baseline](sampling-baseline.md)。
 
 下面保留通用接口与初始环境准备流程。`scripts/run_checks.sh` 运行原 greedy 配置；最新已验证的采样设置使用 `configs/baseline_sampling_*.json`。已完成的阶段无需重复运行。

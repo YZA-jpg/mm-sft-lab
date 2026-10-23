@@ -14,13 +14,14 @@ from .common import (append, code_identity, digest, file_hash, latest, lock, now
 from .config import generation_parameters
 from .data import load_dataset
 from .grading import grade_result
-from .prompts import judge_request, target_request
+from .prompts import judge_request, request_preflight, target_request
 from .transport import Client
 
 
 def initialize(data_root, run_dir, config, model_identity, *, resume=False):
     data_root, run_dir = Path(data_root).resolve(), Path(run_dir).resolve()
     rows, data = load_dataset(data_root, config)
+    preflight = request_preflight(rows, data_root, data)
     signature = {"protocol_version": 2, "config": config, "model_identity": model_identity,
                  "data_manifest_sha256": file_hash(data_root / "manifest.json"),
                  "selection_sha256": digest(rows), "code_sha256": code_identity()["sha256"]}
@@ -36,6 +37,7 @@ def initialize(data_root, run_dir, config, model_identity, *, resume=False):
                 raise ValueError("Cannot resume without a run manifest")
             write_jsonl(run_dir / "selection.jsonl", rows)
             write_json(run_dir / "dataset-manifest.json", data)
+            write_json(run_dir / "request-preflight.json", preflight)
             saved = {"schema_version": 2, "created_at": now(), "run_fingerprint": identity,
                      "signature": signature, "data_root": str(data_root), "model_label": model_identity.get("label", "target"),
                      "is_mock": bool(data["is_mock"] or model_identity.get("kind") == "mock"),
@@ -140,7 +142,10 @@ def stage(run_dir, name, *, client_factory=Client, retry_recoverable=False):
         recoverable = {"authentication_or_configuration_error", "local_preparation_error"}
         remaining = [j for j in jobs if j["job_id"] not in previous or
                      (retry_recoverable and previous[j["job_id"]].get("error_kind") in recoverable)]
-        todo = iter(fair_order(remaining))
+        serial = config["execution"].get("benchmark_schedule", "mixed") == "serial"
+        ordered = (itertools.chain.from_iterable(fair_order([j for j in remaining if j["benchmark"] == benchmark])
+                   for benchmark in config["benchmarks"]) if serial else fair_order(remaining))
+        todo = deque(ordered)
         client = client_factory(config[role], config["execution"]) if remaining else None
         count_key = "generation_concurrency" if name == "generation" else name + "_concurrency"
         concurrency = config["execution"][count_key]
@@ -192,13 +197,32 @@ def stage(run_dir, name, *, client_factory=Client, retry_recoverable=False):
 
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
             pending = {}
+            benchmark_session = None
+
+            def finish_benchmark():
+                nonlocal benchmark_session
+                if benchmark_session is not None:
+                    append(directory / "benchmark-sessions.jsonl", {**{k: v for k, v in benchmark_session.items() if k != "_timer"},
+                           "event": "failed" if fatal else "completed", "finished_epoch": time.time(),
+                           "wall_seconds": time.perf_counter() - benchmark_session["_timer"],
+                           "processing_complete": not fatal})
+                    benchmark_session = None
 
             def fill():
-                nonlocal submitted
-                while not fatal and len(pending) < concurrency:
-                    job = next(todo, None)
-                    if job is None:
-                        break
+                nonlocal submitted, benchmark_session
+                while not fatal and todo and len(pending) < concurrency:
+                    job = todo[0]
+                    if serial and (benchmark_session is None or job["benchmark"] != benchmark_session["benchmark"]):
+                        if pending:
+                            break
+                        finish_benchmark()
+                        benchmark_session = {"session_id": session_id, "benchmark": job["benchmark"],
+                            "run_fingerprint": manifest["run_fingerprint"], "started_epoch": time.time(),
+                            "_timer": time.perf_counter(), "concurrency": concurrency}
+                        append(directory / "benchmark-sessions.jsonl", {k: v for k, v in
+                               {**benchmark_session, "event": "started"}.items() if k != "_timer"})
+                        print(f"{name} benchmark started: {job['benchmark']}; concurrency={concurrency}", flush=True)
+                    todo.popleft()
                     pending[pool.submit(work, job, time.time())] = job["job_id"]
                     submitted += 1
             try:
@@ -213,6 +237,7 @@ def stage(run_dir, name, *, client_factory=Client, retry_recoverable=False):
                         fatal = fatal or row.get("fatal", False)
                         print(f"{name} [{len(previous)}/{len(jobs)}] {row['job_id']}: {row['status']} {row.get('error_kind') or ''}", flush=True)
                     fill()
+                finish_benchmark()
             except BaseException:
                 cancelled.set()
                 raise
